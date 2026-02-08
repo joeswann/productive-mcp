@@ -90,6 +90,110 @@ export const listTaskListsTool = {
   },
 };
 
+const GetTaskListSchema = z.object({
+  id: z.string().min(1, 'Task list ID is required'),
+});
+
+export async function getTaskList(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = GetTaskListSchema.parse(args);
+    const response = await client.getTaskList(params.id);
+    const tl = response.data;
+    let text = `Task List: ${tl.attributes.name} (ID: ${tl.id})`;
+    if (tl.attributes.description) text += `\nDescription: ${tl.attributes.description}`;
+    if (tl.relationships?.board?.data?.id) text += `\nBoard ID: ${tl.relationships.board.data.id}`;
+    text += `\nCreated: ${tl.attributes.created_at}`;
+    return { content: [{ type: 'text', text }] };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`);
+    }
+    throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : 'Unknown error occurred');
+  }
+}
+
+export const getTaskListTool = {
+  name: 'get_task_list',
+  description: 'Get a single task list by ID from Productive.io.',
+  inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Task list ID (required)' } }, required: ['id'] },
+};
+
+const DeleteTaskListSchema = z.object({
+  id: z.string().min(1, 'Task list ID is required'),
+});
+
+export async function deleteTaskList(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = DeleteTaskListSchema.parse(args);
+    await client.deleteTaskList(params.id);
+    return { content: [{ type: 'text', text: `Task list ${params.id} deleted successfully.` }] };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`);
+    }
+    throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : 'Unknown error occurred');
+  }
+}
+
+export const deleteTaskListTool = {
+  name: 'delete_task_list',
+  description: 'Delete a task list in Productive.io.',
+  inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Task list ID to delete (required)' } }, required: ['id'] },
+};
+
+const UpdateTaskListSchema = z.object({
+  id: z.string().min(1, 'Task list ID is required'),
+  name: z.string().min(1, 'Task list name is required'),
+});
+
+export async function updateTaskList(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = UpdateTaskListSchema.parse(args);
+
+    const response = await client.updateTaskList(params.id, {
+      data: {
+        type: 'task_lists',
+        id: params.id,
+        attributes: { name: params.name },
+      },
+    });
+
+    return {
+      content: [{
+        type: 'text',
+        text: `Task list ${params.id} updated successfully!\nName: ${response.data.attributes.name}`,
+      }],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`);
+    }
+    throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : 'Unknown error occurred');
+  }
+}
+
+export const updateTaskListTool = {
+  name: 'update_task_list',
+  description: 'Update a task list name in Productive.io.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'Task list ID to update (required)' },
+      name: { type: 'string', description: 'New task list name (required)' },
+    },
+    required: ['id', 'name'],
+  },
+};
+
 const CreateTaskListSchema = z.object({
   board_id: z.string().describe('The ID of the board to create the task list in'),
   project_id: z.string().describe('The ID of the project'),

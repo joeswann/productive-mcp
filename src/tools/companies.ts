@@ -62,6 +62,39 @@ export async function listCompaniesTool(
   }
 }
 
+const getCompanySchema = z.object({
+  id: z.string().min(1, 'Company ID is required'),
+});
+
+export async function getCompanyTool(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = getCompanySchema.parse(args);
+    const response = await client.getCompany(params.id);
+    const c = response.data;
+    const tags = c.attributes.tag_list?.length ? `\nTags: ${c.attributes.tag_list.join(', ')}` : '';
+    return {
+      content: [{
+        type: 'text',
+        text: `Company: ${c.attributes.name} (ID: ${c.id})\n${c.attributes.domain ? `Domain: ${c.attributes.domain}` : 'No domain'}\n${c.attributes.description ? `Description: ${c.attributes.description}` : ''}${tags}\nCreated: ${c.attributes.created_at}`,
+      }],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`);
+    }
+    throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : 'Unknown error occurred');
+  }
+}
+
+export const getCompanyDefinition = {
+  name: 'get_company',
+  description: 'Get a single company/customer by ID from Productive.io.',
+  inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Company ID (required)' } }, required: ['id'] },
+};
+
 export const listCompaniesDefinition = {
   name: 'list_companies',
   description: 'Get a list of companies/customers from Productive.io',

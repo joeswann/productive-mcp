@@ -91,6 +91,110 @@ export const listBoardsTool = {
   },
 };
 
+const GetBoardSchema = z.object({
+  id: z.string().min(1, 'Board ID is required'),
+});
+
+export async function getBoard(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = GetBoardSchema.parse(args);
+    const response = await client.getBoard(params.id);
+    const b = response.data;
+    let text = `Board: ${b.attributes.name} (ID: ${b.id})`;
+    if (b.attributes.description) text += `\nDescription: ${b.attributes.description}`;
+    if (b.relationships?.project?.data?.id) text += `\nProject ID: ${b.relationships.project.data.id}`;
+    text += `\nCreated: ${b.attributes.created_at}`;
+    return { content: [{ type: 'text', text }] };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`);
+    }
+    throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : 'Unknown error occurred');
+  }
+}
+
+export const getBoardTool = {
+  name: 'get_board',
+  description: 'Get a single board by ID from Productive.io.',
+  inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Board ID (required)' } }, required: ['id'] },
+};
+
+const DeleteBoardSchema = z.object({
+  id: z.string().min(1, 'Board ID is required'),
+});
+
+export async function deleteBoard(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = DeleteBoardSchema.parse(args);
+    await client.deleteBoard(params.id);
+    return { content: [{ type: 'text', text: `Board ${params.id} deleted successfully.` }] };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`);
+    }
+    throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : 'Unknown error occurred');
+  }
+}
+
+export const deleteBoardTool = {
+  name: 'delete_board',
+  description: 'Delete a board in Productive.io.',
+  inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Board ID to delete (required)' } }, required: ['id'] },
+};
+
+const UpdateBoardSchema = z.object({
+  id: z.string().min(1, 'Board ID is required'),
+  name: z.string().min(1, 'Board name is required'),
+});
+
+export async function updateBoard(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = UpdateBoardSchema.parse(args);
+
+    const response = await client.updateBoard(params.id, {
+      data: {
+        type: 'boards',
+        id: params.id,
+        attributes: { name: params.name },
+      },
+    });
+
+    return {
+      content: [{
+        type: 'text',
+        text: `Board ${params.id} updated successfully!\nName: ${response.data.attributes.name}`,
+      }],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`);
+    }
+    throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : 'Unknown error occurred');
+  }
+}
+
+export const updateBoardTool = {
+  name: 'update_board',
+  description: 'Update a board name in Productive.io.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'Board ID to update (required)' },
+      name: { type: 'string', description: 'New board name (required)' },
+    },
+    required: ['id', 'name'],
+  },
+};
+
 const CreateBoardSchema = z.object({
   project_id: z.string().describe('The ID of the project to create the board in'),
   name: z.string().describe('Name of the board'),

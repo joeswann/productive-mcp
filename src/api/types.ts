@@ -510,6 +510,187 @@ export interface ProductiveTimeEntryCreate {
   };
 }
 
+export interface ProductiveProjectCreate {
+  data: {
+    type: 'projects';
+    attributes: {
+      name: string;
+      description?: string;
+      project_type_id: number; // 1=internal, 2=client
+    };
+    relationships: {
+      company: {
+        data: {
+          id: string;
+          type: 'companies';
+        };
+      };
+      project_manager: {
+        data: {
+          id: string;
+          type: 'people';
+        };
+      };
+      workflow: {
+        data: {
+          id: string;
+          type: 'workflows';
+        };
+      };
+    };
+  };
+}
+
+export interface ProductiveWorkflow {
+  id: string;
+  type: 'workflows';
+  attributes: {
+    name: string;
+    archived_at?: string | null;
+    [key: string]: unknown;
+  };
+}
+
+export interface ProductiveDealStatus {
+  id: string;
+  type: 'deal_statuses';
+  attributes: {
+    name: string;
+    position: number;
+    status_id: number; // 1=active, 2=won, 3=lost
+    color_id?: number;
+    time_tracking_enabled?: boolean;
+    expense_tracking_enabled?: boolean;
+    archived_at?: string | null;
+    [key: string]: unknown;
+  };
+}
+
+export interface ProductiveDealCreate {
+  data: {
+    type: 'deals';
+    attributes: {
+      name: string;
+      date: string; // YYYY-MM-DD
+      deal_type_id: number;
+      deal_status_id?: number;
+      probability?: number;
+      currency?: string;
+      budget?: boolean; // true = budget, false = deal
+    };
+    relationships: {
+      company: {
+        data: {
+          id: string;
+          type: 'companies';
+        };
+      };
+      responsible: {
+        data: {
+          id: string;
+          type: 'people';
+        };
+      };
+      project?: {
+        data: {
+          id: string;
+          type: 'projects';
+        };
+      };
+    };
+  };
+}
+
+export interface ProductiveProjectUpdate {
+  data: {
+    type: 'projects';
+    id: string;
+    attributes?: {
+      name?: string;
+      project_manager_id?: number;
+      project_type_id?: number;
+      project_color_id?: number;
+      workflow_id?: number;
+    };
+    relationships?: {
+      company?: {
+        data: {
+          id: string;
+          type: 'companies';
+        };
+      };
+    };
+  };
+}
+
+export interface ProductiveDealUpdate {
+  data: {
+    type: 'deals';
+    id: string;
+    attributes?: {
+      name?: string;
+      date?: string;
+      probability?: number;
+      currency?: string;
+      deal_status_id?: number;
+      note?: string;
+    };
+    relationships?: {
+      company?: {
+        data: {
+          id: string;
+          type: 'companies';
+        };
+      };
+      responsible?: {
+        data: {
+          id: string;
+          type: 'people';
+        };
+      };
+      project?: {
+        data: {
+          id: string;
+          type: 'projects';
+        };
+      };
+    };
+  };
+}
+
+export interface ProductiveBoardUpdate {
+  data: {
+    type: 'boards';
+    id: string;
+    attributes?: {
+      name?: string;
+    };
+  };
+}
+
+export interface ProductiveTaskListUpdate {
+  data: {
+    type: 'task_lists';
+    id: string;
+    attributes?: {
+      name?: string;
+    };
+  };
+}
+
+export interface ProductiveTimeEntryUpdate {
+  data: {
+    type: 'time_entries';
+    id: string;
+    attributes?: {
+      date?: string;
+      time?: number;
+      billable_time?: number;
+      note?: string;
+    };
+  };
+}
+
 export interface ProductiveError {
   errors: Array<{
     status?: string;

@@ -20,7 +20,16 @@ import {
   ProductiveTaskListCreate,
   ProductiveCommentCreate,
   ProductiveTimeEntryCreate,
-  ProductiveError 
+  ProductiveProjectCreate,
+  ProductiveProjectUpdate,
+  ProductiveDealCreate,
+  ProductiveDealUpdate,
+  ProductiveBoardUpdate,
+  ProductiveTaskListUpdate,
+  ProductiveTimeEntryUpdate,
+  ProductiveDealStatus,
+  ProductiveWorkflow,
+  ProductiveError
 } from './types.js';
 
 export class ProductiveAPIClient {
@@ -125,6 +134,143 @@ export class ProductiveAPIClient {
     return this.makeRequest<ProductiveResponse<ProductiveProject>>(path);
   }
   
+  async createProject(projectData: ProductiveProjectCreate): Promise<ProductiveSingleResponse<ProductiveProject>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveProject>>('projects', {
+      method: 'POST',
+      body: JSON.stringify(projectData),
+    });
+  }
+
+  async createDeal(dealData: ProductiveDealCreate): Promise<ProductiveSingleResponse<ProductiveDeal>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveDeal>>('deals', {
+      method: 'POST',
+      body: JSON.stringify(dealData),
+    });
+  }
+
+  async updateProject(id: string, data: ProductiveProjectUpdate): Promise<ProductiveSingleResponse<ProductiveProject>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveProject>>(`projects/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateDeal(id: string, data: ProductiveDealUpdate): Promise<ProductiveSingleResponse<ProductiveDeal>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveDeal>>(`deals/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateBoard(id: string, data: ProductiveBoardUpdate): Promise<ProductiveSingleResponse<ProductiveBoard>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveBoard>>(`boards/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateTaskList(id: string, data: ProductiveTaskListUpdate): Promise<ProductiveSingleResponse<ProductiveTaskList>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveTaskList>>(`task_lists/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateTimeEntry(id: string, data: ProductiveTimeEntryUpdate): Promise<ProductiveSingleResponse<ProductiveTimeEntry>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveTimeEntry>>(`time_entries/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // ── Get single resource methods ──
+
+  async getProject(id: string): Promise<ProductiveSingleResponse<ProductiveProject>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveProject>>(`projects/${id}`);
+  }
+
+  async getBoard(id: string): Promise<ProductiveSingleResponse<ProductiveBoard>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveBoard>>(`boards/${id}`);
+  }
+
+  async getTaskList(id: string): Promise<ProductiveSingleResponse<ProductiveTaskList>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveTaskList>>(`task_lists/${id}`);
+  }
+
+  async getDeal(id: string): Promise<ProductiveSingleResponse<ProductiveDeal>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveDeal>>(`deals/${id}`);
+  }
+
+  async getCompany(id: string): Promise<ProductiveSingleResponse<ProductiveCompany>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveCompany>>(`companies/${id}`);
+  }
+
+  async getService(id: string): Promise<ProductiveSingleResponse<ProductiveService>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveService>>(`services/${id}`);
+  }
+
+  async getPerson(id: string): Promise<ProductiveSingleResponse<ProductivePerson>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductivePerson>>(`people/${id}`);
+  }
+
+  // ── Delete methods ──
+
+  async deleteProject(id: string): Promise<void> {
+    await this.makeRequest<void>(`projects/${id}`, { method: 'DELETE' });
+  }
+
+  async deleteBoard(id: string): Promise<void> {
+    await this.makeRequest<void>(`boards/${id}`, { method: 'DELETE' });
+  }
+
+  async deleteTaskList(id: string): Promise<void> {
+    await this.makeRequest<void>(`task_lists/${id}`, { method: 'DELETE' });
+  }
+
+  async deleteTask(id: string): Promise<void> {
+    await this.makeRequest<void>(`tasks/${id}`, { method: 'DELETE' });
+  }
+
+  async deleteTimeEntry(id: string): Promise<void> {
+    await this.makeRequest<void>(`time_entries/${id}`, { method: 'DELETE' });
+  }
+
+  async deleteDeal(id: string): Promise<void> {
+    await this.makeRequest<void>(`deals/${id}`, { method: 'DELETE' });
+  }
+
+  async listWorkflows(params?: {
+    limit?: number;
+    page?: number;
+  }): Promise<ProductiveResponse<ProductiveWorkflow>> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) {
+      queryParams.append('page[size]', params.limit.toString());
+    }
+    if (params?.page) {
+      queryParams.append('page[number]', params.page.toString());
+    }
+    const queryString = queryParams.toString();
+    const path = `workflows${queryString ? `?${queryString}` : ''}`;
+    return this.makeRequest<ProductiveResponse<ProductiveWorkflow>>(path);
+  }
+
+  async listDealStatuses(params?: {
+    limit?: number;
+    page?: number;
+  }): Promise<ProductiveResponse<ProductiveDealStatus>> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) {
+      queryParams.append('page[size]', params.limit.toString());
+    }
+    if (params?.page) {
+      queryParams.append('page[number]', params.page.toString());
+    }
+    const queryString = queryParams.toString();
+    const path = `deal_statuses${queryString ? `?${queryString}` : ''}`;
+    return this.makeRequest<ProductiveResponse<ProductiveDealStatus>>(path);
+  }
+
   async listTasks(params?: {
     project_id?: string;
     assignee_id?: string;
