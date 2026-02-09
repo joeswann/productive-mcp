@@ -4,7 +4,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema, ListPromptsRequestSchema
 import { z } from 'zod';
 import { getConfig } from './config/index.js';
 import { ProductiveAPIClient } from './api/client.js';
-import { listProjectsTool, createProjectTool, updateProjectTool, getProjectTool, deleteProjectTool, listProjectsDefinition, createProjectDefinition, updateProjectDefinition, getProjectDefinition, deleteProjectDefinition } from './tools/projects.js';
+import { listProjectsTool, createProjectTool, updateProjectTool, getProjectTool, deleteProjectTool, copyProjectTool, listProjectsDefinition, createProjectDefinition, updateProjectDefinition, getProjectDefinition, deleteProjectDefinition, copyProjectDefinition } from './tools/projects.js';
 import { listTasksTool, getProjectTasksTool, getTaskTool, createTaskTool, updateTaskAssignmentTool, updateTaskDetailsTool, deleteTaskTool, listTasksDefinition, getProjectTasksDefinition, getTaskDefinition, createTaskDefinition, updateTaskAssignmentDefinition, updateTaskDetailsDefinition, deleteTaskDefinition } from './tools/tasks.js';
 import { listCompaniesTool, getCompanyTool, listCompaniesDefinition, getCompanyDefinition } from './tools/companies.js';
 import { myTasksTool, myTasksDefinition } from './tools/my-tasks.js';
@@ -13,26 +13,30 @@ import { listTaskLists, createTaskList, updateTaskList, getTaskList, deleteTaskL
 import { whoAmI, whoAmITool } from './tools/whoami.js';
 import { listActivities, listActivitiesTool } from './tools/activities.js';
 import { getRecentUpdates, getRecentUpdatesTool } from './tools/recent-updates.js';
-import { addTaskCommentTool, addTaskCommentDefinition } from './tools/comments.js';
+import { addTaskCommentTool, addTaskCommentDefinition, deleteTaskCommentTool, deleteTaskCommentDefinition } from './tools/comments.js';
+import { createDocumentTool, createDocumentDefinition } from './tools/documents.js';
 import { updateTaskStatusTool, updateTaskStatusDefinition } from './tools/task-status.js';
 import { listWorkflowStatusesTool, listWorkflowStatusesDefinition } from './tools/workflow-statuses.js';
-import { listTimeEntresTool, createTimeEntryTool, updateTimeEntryTool, deleteTimeEntryTool, listServicesTool, getProjectServicesTool, listProjectDealsTool, listDealServicesTool, createDealTool, updateDealTool, getDealTool, deleteDealTool, listTimeEntriesDefinition, createTimeEntryDefinition, updateTimeEntryDefinition, deleteTimeEntryDefinition, listServicesDefinition, getProjectServicesDefinition, listProjectDealsDefinition, listDealServicesDefinition, createDealDefinition, updateDealDefinition, getDealDefinition, deleteDealDefinition } from './tools/time-entries.js';
+import { listTimeEntresTool, createTimeEntryTool, updateTimeEntryTool, deleteTimeEntryTool, listTimeEntriesDefinition, createTimeEntryDefinition, updateTimeEntryDefinition, deleteTimeEntryDefinition } from './tools/time-entries.js';
+import { listProjectDealsTool, createDealTool, updateDealTool, getDealTool, deleteDealTool, copyDealTool, listProjectDealsDefinition, createDealDefinition, updateDealDefinition, getDealDefinition, deleteDealDefinition, copyDealDefinition } from './tools/deals.js';
+import { listServicesTool, getProjectServicesTool, listDealServicesTool, createServiceTool, listServicesDefinition, getProjectServicesDefinition, listDealServicesDefinition, createServiceDefinition } from './tools/services.js';
 import { updateTaskSprint, updateTaskSprintTool } from './tools/task-sprint.js';
 import { moveTaskToList, moveTaskToListTool } from './tools/task-list-move.js';
 import { addToBacklog, addToBacklogTool } from './tools/task-backlog.js';
 import { taskRepositionTool, taskRepositionDefinition, taskRepositionSchema } from './tools/task-reposition.js';
+import { listDocumentTypesTool, listDocumentTypesDefinition, listInvoicesTool, listInvoicesDefinition, getInvoiceTool, getInvoiceDefinition, deleteInvoiceTool, deleteInvoiceDefinition, createInvoiceTool, createInvoiceDefinition, updateInvoiceTool, updateInvoiceDefinition, linkInvoiceToBudgetTool, linkInvoiceToBudgetDefinition, createLineItemTool, createLineItemDefinition, finalizeInvoiceTool, finalizeInvoiceDefinition } from './tools/invoices.js';
 import { generateTimesheetPrompt, timesheetPromptDefinition, generateQuickTimesheetPrompt, quickTimesheetPromptDefinition } from './prompts/timesheet.js';
 
 export async function createServer() {
   // Initialize API client and config early to check user context
   const config = getConfig();
   const hasConfiguredUser = !!config.PRODUCTIVE_USER_ID;
-  
+
   const server = new Server(
     {
       name: 'productive-mcp',
       version: '1.0.0',
-      description: `MCP server for Productive.io API integration. Productive has a hierarchical structure: Customers → Projects → Boards → Task Lists → Tasks.${hasConfiguredUser ? ` IMPORTANT: When users say "me" or "assign to me", use "me" as the assignee_id value - it automatically resolves to the configured user ID ${config.PRODUCTIVE_USER_ID}.` : ' No user configured - set PRODUCTIVE_USER_ID to enable "me" context.'} Use the 'whoami' tool to check current user context.`,
+      description: `MCP server for Productive.io API integration. Productive has a hierarchical structure: Customers → Projects → Boards → Task Lists → Tasks. Time tracking: Project → Deal/Budget → Service → Time Entry. Invoicing: 1) create_invoice (creates draft, $0) → 2) create_line_item (adds amounts + tax) → 3) link_invoice_to_budget (connects to deal/budget) → 4) finalize_invoice (one-way, locks invoice and auto-assigns number). Invoice amounts come from line items, NOT from the invoice itself. The attribution amount must match the invoice total for Productive to show it as correctly distributed. Use xero_invoice_url on create/update to link to Xero.${hasConfiguredUser ? ` IMPORTANT: When users say "me" or "assign to me", use "me" as the assignee_id value - it automatically resolves to the configured user ID ${config.PRODUCTIVE_USER_ID}.` : ' No user configured - set PRODUCTIVE_USER_ID to enable "me" context.'} Use the 'whoami' tool to check current user context.`,
     },
     {
       capabilities: {
@@ -42,7 +46,7 @@ export async function createServer() {
     }
   );
   const apiClient = new ProductiveAPIClient(config);
-  
+
   // Register handlers
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
@@ -54,6 +58,7 @@ export async function createServer() {
       createProjectDefinition,
       updateProjectDefinition,
       deleteProjectDefinition,
+      copyProjectDefinition,
       listBoardsTool,
       getBoardTool,
       createBoardTool,
@@ -87,22 +92,35 @@ export async function createServer() {
       createDealDefinition,
       updateDealDefinition,
       deleteDealDefinition,
+      copyDealDefinition,
       listServicesDefinition,
       getProjectServicesDefinition,
+      createServiceDefinition,
       updateTaskSprintTool,
       moveTaskToListTool,
       addToBacklogTool,
       taskRepositionDefinition,
+      listDocumentTypesDefinition,
+      listInvoicesDefinition,
+      getInvoiceDefinition,
+      deleteInvoiceDefinition,
+      createInvoiceDefinition,
+      updateInvoiceDefinition,
+      linkInvoiceToBudgetDefinition,
+      createLineItemDefinition,
+      finalizeInvoiceDefinition,
+      deleteTaskCommentDefinition,
+      createDocumentDefinition,
     ],
   }));
-  
+
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    
+
     switch (name) {
       case 'whoami':
         return await whoAmI(apiClient, args, config);
-        
+
       case 'list_companies':
         return await listCompaniesTool(apiClient, args);
 
@@ -124,18 +142,21 @@ export async function createServer() {
       case 'delete_project':
         return await deleteProjectTool(apiClient, args);
 
+      case 'copy_project':
+        return await copyProjectTool(apiClient, args);
+
       case 'list_tasks':
         return await listTasksTool(apiClient, args);
-        
+
       case 'get_project_tasks':
         return await getProjectTasksTool(apiClient, args);
-        
+
       case 'get_task':
         return await getTaskTool(apiClient, args);
-        
+
       case 'my_tasks':
         return await myTasksTool(apiClient, config, args);
-        
+
       case 'list_boards':
         return await listBoards(apiClient, args);
 
@@ -153,10 +174,10 @@ export async function createServer() {
 
       case 'create_task':
         return await createTaskTool(apiClient, args, config);
-        
+
       case 'update_task_assignment':
         return await updateTaskAssignmentTool(apiClient, args, config);
-        
+
       case 'update_task_details':
         return await updateTaskDetailsTool(apiClient, args);
 
@@ -165,13 +186,13 @@ export async function createServer() {
 
       case 'add_task_comment':
         return await addTaskCommentTool(apiClient, args);
-        
+
       case 'update_task_status':
         return await updateTaskStatusTool(apiClient, args);
-        
+
       case 'list_workflow_statuses':
         return await listWorkflowStatusesTool(apiClient, args);
-        
+
       case 'list_task_lists':
         return await listTaskLists(apiClient, args);
 
@@ -189,13 +210,13 @@ export async function createServer() {
 
       case 'list_activities':
         return await listActivities(apiClient, args);
-        
+
       case 'get_recent_updates':
         return await getRecentUpdates(apiClient, args);
-        
+
       case 'list_time_entries':
         return await listTimeEntresTool(apiClient, args, config);
-        
+
       case 'create_time_entry':
         return await createTimeEntryTool(apiClient, args, config);
 
@@ -207,7 +228,7 @@ export async function createServer() {
 
       case 'list_project_deals':
         return await listProjectDealsTool(apiClient, args);
-        
+
       case 'list_deal_services':
         return await listDealServicesTool(apiClient, args);
 
@@ -223,28 +244,67 @@ export async function createServer() {
       case 'delete_deal':
         return await deleteDealTool(apiClient, args);
 
+      case 'copy_deal':
+        return await copyDealTool(apiClient, args);
+
       case 'list_services':
         return await listServicesTool(apiClient, args);
-        
+
       case 'get_project_services':
         return await getProjectServicesTool(apiClient, args);
-        
+
+      case 'create_service':
+        return await createServiceTool(apiClient, args);
+
       case 'update_task_sprint':
         return await updateTaskSprint(apiClient, args);
-        
+
       case 'move_task_to_list':
         return await moveTaskToList(apiClient, args);
-        
+
       case 'add_to_backlog':
         return await addToBacklog(apiClient, args);
-        
+
       case 'reposition_task':
         // Ensure args has the required taskId property
         if (!args?.taskId) {
           throw new Error('taskId is required for task repositioning');
         }
         return await taskRepositionTool(apiClient, args as z.infer<typeof taskRepositionSchema>);
-        
+
+      case 'list_document_types':
+        return await listDocumentTypesTool(apiClient, args);
+
+      case 'list_invoices':
+        return await listInvoicesTool(apiClient, args);
+
+      case 'get_invoice':
+        return await getInvoiceTool(apiClient, args);
+
+      case 'delete_invoice':
+        return await deleteInvoiceTool(apiClient, args);
+
+      case 'create_invoice':
+        return await createInvoiceTool(apiClient, args);
+
+      case 'update_invoice':
+        return await updateInvoiceTool(apiClient, args);
+
+      case 'link_invoice_to_budget':
+        return await linkInvoiceToBudgetTool(apiClient, args);
+
+      case 'create_line_item':
+        return await createLineItemTool(apiClient, args);
+
+      case 'finalize_invoice':
+        return await finalizeInvoiceTool(apiClient, args);
+
+      case 'delete_task_comment':
+        return await deleteTaskCommentTool(apiClient, args);
+
+      case 'create_document':
+        return await createDocumentTool(apiClient, args);
+
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -260,25 +320,25 @@ export async function createServer() {
 
   server.setRequestHandler(GetPromptRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    
+
     switch (name) {
       case 'timesheet_entry':
         return await generateTimesheetPrompt(args);
-        
+
       case 'timesheet_step':
         return await generateQuickTimesheetPrompt(args);
-        
+
       default:
         throw new Error(`Unknown prompt: ${name}`);
     }
   });
-  
+
   // Connect to stdio transport
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  
+
   // Don't output anything to stdout/stderr after connecting
   // as it can interfere with the MCP protocol
-  
+
   return server;
 }

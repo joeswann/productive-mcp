@@ -193,13 +193,18 @@ export interface ProductiveTaskListCreate {
       name: string;
       description?: string;
       position?: number;
-      project_id: string;
     };
     relationships: {
       board: {
         data: {
           id: string;
           type: 'boards';
+        };
+      };
+      project: {
+        data: {
+          id: string;
+          type: 'projects';
         };
       };
     };
@@ -506,6 +511,12 @@ export interface ProductiveTimeEntryCreate {
           type: 'tasks';
         };
       };
+      project?: {
+        data: {
+          id: string;
+          type: 'projects';
+        };
+      };
     };
   };
 }
@@ -611,6 +622,7 @@ export interface ProductiveProjectUpdate {
       project_type_id?: number;
       project_color_id?: number;
       workflow_id?: number;
+      preferences?: Record<string, unknown>;
     };
     relationships?: {
       company?: {
@@ -633,7 +645,9 @@ export interface ProductiveDealUpdate {
       probability?: number;
       currency?: string;
       deal_status_id?: number;
+      budget_type?: number;
       note?: string;
+      value?: string;
     };
     relationships?: {
       company?: {
@@ -687,6 +701,208 @@ export interface ProductiveTimeEntryUpdate {
       time?: number;
       billable_time?: number;
       note?: string;
+    };
+  };
+}
+
+// Invoice types
+
+export interface ProductiveDocumentType {
+  id: string;
+  type: 'document_types';
+  attributes: {
+    name: string;
+    locale?: string;
+    exportable_type_id?: number;
+    archived_at?: string | null;
+    [key: string]: unknown;
+  };
+}
+
+export interface ProductiveInvoice {
+  id: string;
+  type: 'invoices';
+  attributes: {
+    number?: string;
+    subject?: string;
+    invoiced_on: string;
+    pay_on?: string;
+    paid_on?: string;
+    currency: string;
+    amount?: string;
+    amount_tax?: string;
+    amount_with_tax?: string;
+    amount_paid?: string;
+    amount_unpaid?: string;
+    note?: string;
+    footer?: string;
+    purchase_order_number?: string;
+    tag_list?: string[];
+    exported?: boolean;
+    export_integration_type_id?: number;
+    export_id?: string;
+    export_invoice_url?: string;
+    created_at?: string;
+    updated_at?: string;
+    [key: string]: unknown;
+  };
+  relationships?: {
+    company?: { data: { id: string; type: 'companies' } };
+    document_type?: { data: { id: string; type: 'document_types' } };
+    [key: string]: unknown;
+  };
+}
+
+export interface ProductiveInvoiceCreate {
+  data: {
+    type: 'invoices';
+    attributes: {
+      invoiced_on: string;
+      currency: string;
+      subject?: string;
+      number?: string;
+      pay_on?: string;
+      note?: string;
+      footer?: string;
+      purchase_order_number?: string;
+      tag_list?: string[];
+      export_invoice_url?: string;
+      exported?: boolean;
+      export_id?: string;
+    };
+    relationships: {
+      company: { data: { id: string; type: 'companies' } };
+      document_type: { data: { id: string; type: 'document_types' } };
+      deal?: { data: { id: string; type: 'deals' } };
+    };
+  };
+}
+
+export interface ProductiveInvoiceUpdate {
+  data: {
+    type: 'invoices';
+    id: string;
+    attributes?: {
+      subject?: string;
+      note?: string;
+      footer?: string;
+      pay_on?: string;
+      paid_on?: string;
+      purchase_order_number?: string;
+      export_invoice_url?: string;
+      exported?: boolean;
+      export_id?: string;
+      tag_list?: string[];
+    };
+  };
+}
+
+export interface ProductiveInvoiceAttribution {
+  id: string;
+  type: 'invoice_attributions';
+  attributes: {
+    amount?: string;
+    currency?: string;
+    date_from?: string;
+    date_to?: string;
+    [key: string]: unknown;
+  };
+  relationships?: {
+    invoice?: { data: { id: string; type: 'invoices' } };
+    budget?: { data: { id: string; type: 'deals' } };
+    [key: string]: unknown;
+  };
+}
+
+export interface ProductiveInvoiceAttributionCreate {
+  data: {
+    type: 'invoice_attributions';
+    attributes: {
+      amount: string;
+    };
+    relationships: {
+      invoice: { data: { id: string; type: 'invoices' } };
+      budget: { data: { id: string; type: 'deals' } };
+    };
+  };
+}
+
+export interface ProductiveLineItem {
+  id: string;
+  type: 'line_items';
+  attributes: {
+    description?: string;
+    quantity?: string;
+    unit_price?: number;
+    unit_id?: number;
+    discount?: number | null;
+    position?: number;
+    amount?: number;
+    amount_tax?: number;
+    amount_with_tax?: number;
+    tax_name?: string;
+    tax_value?: string;
+    currency?: string;
+    [key: string]: unknown;
+  };
+  relationships?: {
+    invoice?: { data: { id: string; type: 'invoices' } };
+    tax_rate?: { data: { id: string; type: 'tax_rates' } };
+    [key: string]: unknown;
+  };
+}
+
+export interface ProductiveLineItemCreate {
+  data: {
+    type: 'line_items';
+    attributes: {
+      description: string;
+      quantity: string;
+      unit_price: number;
+      unit_id: number;
+      discount?: number | null;
+      position?: number;
+    };
+    relationships: {
+      invoice: { data: { id: string; type: 'invoices' } };
+      tax_rate: { data: { id: string; type: 'tax_rates' } };
+    };
+  };
+}
+
+export interface ProductivePage {
+  id: string;
+  type: 'pages';
+  attributes: {
+    title: string;
+    body?: string;
+    created_at?: string;
+    edited_at?: string;
+    position?: number;
+    version_number?: number;
+    parent_page_id?: number;
+    root_page_id?: number;
+    [key: string]: unknown;
+  };
+  relationships?: {
+    project?: { data: { id: string; type: 'projects' } };
+    parent_page?: { data: { id: string; type: 'pages' } };
+    root_page?: { data: { id: string; type: 'pages' } };
+    [key: string]: unknown;
+  };
+}
+
+export interface ProductivePageCreate {
+  data: {
+    type: 'pages';
+    attributes: {
+      title: string;
+      body?: string;
+    };
+    relationships?: {
+      project?: { data: { id: string; type: 'projects' } };
+      parent_page?: { data: { id: string; type: 'pages' } };
+      root_page?: { data: { id: string; type: 'pages' } };
     };
   };
 }

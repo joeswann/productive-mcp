@@ -62,6 +62,55 @@ export async function addTaskCommentTool(
   }
 }
 
+const deleteTaskCommentSchema = z.object({
+  comment_id: z.string().min(1, 'Comment ID is required'),
+});
+
+export async function deleteTaskCommentTool(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = deleteTaskCommentSchema.parse(args);
+
+    await client.deleteComment(params.comment_id);
+
+    return {
+      content: [{
+        type: 'text',
+        text: `Comment ${params.comment_id} deleted successfully.`,
+      }],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`
+      );
+    }
+
+    throw new McpError(
+      ErrorCode.InternalError,
+      error instanceof Error ? error.message : 'Unknown error occurred'
+    );
+  }
+}
+
+export const deleteTaskCommentDefinition = {
+  name: 'delete_task_comment',
+  description: 'Delete a comment from a task in Productive.io',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      comment_id: {
+        type: 'string',
+        description: 'ID of the comment to delete (required)',
+      },
+    },
+    required: ['comment_id'],
+  },
+};
+
 export const addTaskCommentDefinition = {
   name: 'add_task_comment',
   description: 'Add a comment to a task in Productive.io',

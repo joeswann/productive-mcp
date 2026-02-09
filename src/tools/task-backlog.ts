@@ -51,13 +51,18 @@ export async function addToBacklog(
           attributes: {
             name: 'Backlog',
             description: 'Product backlog for unscheduled tasks',
-            project_id: project_id
           },
           relationships: {
             board: {
               data: {
                 id: boardId,
                 type: 'boards'
+              }
+            },
+            project: {
+              data: {
+                id: project_id,
+                type: 'projects'
               }
             }
           }

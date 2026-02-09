@@ -42,16 +42,33 @@ export async function listTasksTool(
       };
     }
     
+    // Build lookup maps from included relationships
+    const included = (response as any).included || [];
+    const peopleMap = new Map<string, string>();
+    const statusMap = new Map<string, string>();
+    for (const inc of included) {
+      if (inc.type === 'people') peopleMap.set(inc.id, `${inc.attributes?.first_name || ''} ${inc.attributes?.last_name || ''}`.trim());
+      if (inc.type === 'workflow_statuses') statusMap.set(inc.id, inc.attributes?.name || '');
+    }
+
     const tasksText = response.data.filter(task => task && task.attributes).map(task => {
       const projectId = task.relationships?.project?.data?.id;
-      const assigneeId = task.relationships?.assignee?.data?.id;
-      const statusText = task.attributes.status === 1 ? 'open' : task.attributes.status === 2 ? 'closed' : `status ${task.attributes.status}`;
+      // Handle both singular 'assignee' and plural 'assignees' relationship formats
+      const assigneeData = task.relationships?.assignee?.data;
+      const assignees = task.relationships?.assignees?.data;
+      let assigneeText = 'Unassigned';
+      if (assigneeData) {
+        assigneeText = peopleMap.get(assigneeData.id) || `ID:${assigneeData.id}`;
+      } else if (Array.isArray(assignees) && assignees.length > 0) {
+        assigneeText = assignees.map((a: any) => peopleMap.get(a.id) || `ID:${a.id}`).join(', ');
+      }
+      const wsId = task.relationships?.workflow_status?.data?.id;
+      const statusText = wsId && statusMap.get(wsId) ? statusMap.get(wsId) : (task.attributes.status === 1 ? 'open' : task.attributes.status === 2 ? 'closed' : `status ${task.attributes.status}`);
       return `• ${task.attributes.title} (ID: ${task.id})
-  Status: ${statusText}
+  Status: ${statusText} | Assignee: ${assigneeText}
   ${task.attributes.due_date ? `Due: ${task.attributes.due_date}` : 'No due date'}
   ${projectId ? `Project ID: ${projectId}` : ''}
-  ${assigneeId ? `Assignee ID: ${assigneeId}` : 'Unassigned'}
-  ${task.attributes.description ? `Description: ${task.attributes.description}` : ''}`;
+  ${task.attributes.worked_time ? `Tracked: ${(task.attributes.worked_time / 60).toFixed(1)}h` : 'No time tracked'}`;
     }).join('\n\n');
     
     const summary = `Found ${response.data.length} task${response.data.length !== 1 ? 's' : ''}${response.meta?.total_count ? ` (showing ${response.data.length} of ${response.meta.total_count})` : ''}:\n\n${tasksText}`;
@@ -99,17 +116,35 @@ export async function getProjectTasksTool(
       };
     }
     
+    // Build lookup maps from included relationships
+    const included = (response as any).included || [];
+    const peopleMap = new Map<string, string>();
+    const statusMap = new Map<string, string>();
+    for (const inc of included) {
+      if (inc.type === 'people') peopleMap.set(inc.id, `${inc.attributes?.first_name || ''} ${inc.attributes?.last_name || ''}`.trim());
+      if (inc.type === 'workflow_statuses') statusMap.set(inc.id, inc.attributes?.name || '');
+    }
+
     const tasksText = response.data.filter(task => task && task.attributes).map(task => {
-      const assigneeId = task.relationships?.assignee?.data?.id;
-      const statusText = task.attributes.status === 1 ? 'open' : task.attributes.status === 2 ? 'closed' : `status ${task.attributes.status}`;
+      // Handle both singular 'assignee' and plural 'assignees' relationship formats
+      const assigneeData = task.relationships?.assignee?.data;
+      const assignees = task.relationships?.assignees?.data;
+      let assigneeText = 'Unassigned';
+      if (assigneeData) {
+        assigneeText = peopleMap.get(assigneeData.id) || `ID:${assigneeData.id}`;
+      } else if (Array.isArray(assignees) && assignees.length > 0) {
+        assigneeText = assignees.map((a: any) => peopleMap.get(a.id) || `ID:${a.id}`).join(', ');
+      }
+      const wsId = task.relationships?.workflow_status?.data?.id;
+      const statusText = wsId && statusMap.get(wsId) ? statusMap.get(wsId) : (task.attributes.status === 1 ? 'open' : task.attributes.status === 2 ? 'closed' : `status ${task.attributes.status}`);
       return `• ${task.attributes.title} (ID: ${task.id})
-  Status: ${statusText}
+  Status: ${statusText} | Assignee: ${assigneeText}
   ${task.attributes.due_date ? `Due: ${task.attributes.due_date}` : 'No due date'}
-  ${assigneeId ? `Assignee ID: ${assigneeId}` : 'Unassigned'}
-  ${task.attributes.description ? `Description: ${task.attributes.description}` : ''}`;
+  ${task.attributes.worked_time ? `Tracked: ${(task.attributes.worked_time / 60).toFixed(1)}h` : 'No time tracked'}`;
     }).join('\n\n');
-    
-    const summary = `Project ${params.project_id} has ${response.data.length} task${response.data.length !== 1 ? 's' : ''}:\n\n${tasksText}`;
+
+    const totalTracked = response.data.reduce((sum, t) => sum + (t.attributes?.worked_time || 0), 0);
+    const summary = `Project ${params.project_id} has ${response.data.length} task${response.data.length !== 1 ? 's' : ''}${totalTracked ? ` (Total tracked: ${(totalTracked / 60).toFixed(1)}h)` : ''}:\n\n${tasksText}`;
     
     return {
       content: [{
@@ -612,6 +647,7 @@ const updateTaskDetailsSchema = z.object({
   task_id: z.string().min(1, 'Task ID is required'),
   title: z.string().min(1, 'Task title cannot be empty').optional(),
   description: z.string().optional(),
+  due_date: z.string().optional(),
 });
 
 export async function updateTaskDetailsTool(
@@ -622,10 +658,10 @@ export async function updateTaskDetailsTool(
     const params = updateTaskDetailsSchema.parse(args);
     
     // Ensure at least one field is being updated
-    if (!params.title && params.description === undefined) {
+    if (!params.title && params.description === undefined && params.due_date === undefined) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        'At least one field (title or description) must be provided for update'
+        'At least one field (title, description, or due_date) must be provided for update'
       );
     }
     
@@ -645,7 +681,11 @@ export async function updateTaskDetailsTool(
     if (params.description !== undefined) {
       taskUpdate.data.attributes!.description = params.description;
     }
-    
+
+    if (params.due_date !== undefined) {
+      taskUpdate.data.attributes!.due_date = params.due_date;
+    }
+
     const response = await client.updateTask(params.task_id, taskUpdate);
     
     let text = `Task details updated successfully!\n`;
@@ -662,7 +702,11 @@ export async function updateTaskDetailsTool(
         text += `✓ Description cleared\n`;
       }
     }
-    
+
+    if (params.due_date !== undefined) {
+      text += `✓ Due date set to: ${response.data.attributes.due_date}\n`;
+    }
+
     if (response.data.attributes.updated_at) {
       text += `Updated at: ${response.data.attributes.updated_at}`;
     }
@@ -690,7 +734,7 @@ export async function updateTaskDetailsTool(
 
 export const updateTaskDetailsDefinition = {
   name: 'update_task_details',
-  description: 'Update the title (name) and/or description of an existing task. At least one field must be provided.',
+  description: 'Update the title (name), description, and/or due date of an existing task. At least one field must be provided.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -705,6 +749,10 @@ export const updateTaskDetailsDefinition = {
       description: {
         type: 'string',
         description: 'New description for the task (optional, use empty string to clear description)',
+      },
+      due_date: {
+        type: 'string',
+        description: 'Due date in YYYY-MM-DD format (optional)',
       },
     },
     required: ['task_id'],

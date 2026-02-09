@@ -215,13 +215,18 @@ export async function createTaskList(
           name: params.name,
           ...(params.description && { description: params.description }),
           position: 0,
-          project_id: params.project_id,
         },
         relationships: {
           board: {
             data: {
               id: params.board_id,
               type: 'boards' as const,
+            },
+          },
+          project: {
+            data: {
+              id: params.project_id,
+              type: 'projects' as const,
             },
           },
         },

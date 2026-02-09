@@ -15,6 +15,7 @@ const createProjectSchema = z.object({
 const listProjectsSchema = z.object({
   status: z.enum(['active', 'archived']).optional(),
   company_id: z.string().optional(),
+  template: z.preprocess(val => val === 'true' ? true : val === 'false' ? false : val, z.boolean()).optional(),
   limit: z.number().min(1).max(200).default(30).optional(),
 });
 
@@ -28,6 +29,7 @@ export async function listProjectsTool(
     const response = await client.listProjects({
       status: params.status,
       company_id: params.company_id,
+      template: params.template,
       limit: params.limit,
     });
     
@@ -206,6 +208,8 @@ const updateProjectSchema = z.object({
   project_manager_id: z.string().optional(),
   project_type_id: z.number().int().min(1).max(2).optional(),
   workflow_id: z.string().optional(),
+  preferences: z.record(z.unknown()).optional(),
+  archived_at: z.string().optional(),
 });
 
 export async function updateProjectTool(
@@ -228,16 +232,19 @@ export async function updateProjectTool(
       managerId = config.PRODUCTIVE_USER_ID;
     }
 
+    const attributes: Record<string, unknown> = {};
+    if (params.name) attributes.name = params.name;
+    if (managerId) attributes.project_manager_id = parseInt(managerId, 10);
+    if (params.project_type_id) attributes.project_type_id = params.project_type_id;
+    if (params.workflow_id) attributes.workflow_id = parseInt(params.workflow_id, 10);
+    if (params.preferences) attributes.preferences = params.preferences;
+    if (params.archived_at) attributes.archived_at = params.archived_at;
+
     const updateData: ProductiveProjectUpdate = {
       data: {
         type: 'projects',
         id: params.id,
-        attributes: {
-          ...(params.name && { name: params.name }),
-          ...(managerId && { project_manager_id: parseInt(managerId, 10) }),
-          ...(params.project_type_id && { project_type_id: params.project_type_id }),
-          ...(params.workflow_id && { workflow_id: parseInt(params.workflow_id, 10) }),
-        },
+        attributes,
         ...(params.company_id && {
           relationships: {
             company: {
@@ -260,6 +267,8 @@ export async function updateProjectTool(
     if (managerId) changes.push(`Project Manager ID: ${managerId}`);
     if (params.project_type_id) changes.push(`Project Type: ${params.project_type_id}`);
     if (params.workflow_id) changes.push(`Workflow ID: ${params.workflow_id}`);
+    if (params.preferences) changes.push(`Preferences: ${JSON.stringify(params.preferences)}`);
+    if (params.archived_at) changes.push(`Archived at: ${params.archived_at}`);
 
     return {
       content: [{
@@ -293,6 +302,8 @@ export const updateProjectDefinition = {
       project_manager_id: { type: 'string', description: 'New project manager person ID (use "me" for configured user)' },
       project_type_id: { type: 'number', description: 'Project type: 1=internal, 2=client', minimum: 1, maximum: 2 },
       workflow_id: { type: 'string', description: 'New workflow ID' },
+      preferences: { type: 'object', description: 'Project preferences object (e.g., navigation_order)' },
+      archived_at: { type: 'string', description: 'Set to a date (YYYY-MM-DD) to archive the project, or empty string to unarchive' },
     },
     required: ['id'],
   },
@@ -374,6 +385,94 @@ export const deleteProjectDefinition = {
   },
 };
 
+const copyProjectSchema = z.object({
+  template_id: z.string().describe('ID of the source project to copy from'),
+  name: z.string().describe('Name for the new project'),
+  company_id: z.string().describe('Company ID for the new project'),
+  project_type_id: z.number().int().min(1).max(2).default(2).optional(),
+  copy_boards: z.boolean().default(true).optional(),
+  copy_task_lists: z.boolean().default(true).optional(),
+  copy_open_tasks: z.boolean().default(true).optional(),
+  copy_closed_tasks: z.boolean().default(false).optional(),
+  copy_budgets: z.boolean().default(false).optional(),
+  copy_deals: z.boolean().default(false).optional(),
+  copy_task_description: z.boolean().default(true).optional(),
+  copy_assignees: z.boolean().default(false).optional(),
+  copy_memberships: z.boolean().default(false).optional(),
+  copy_notes: z.boolean().default(false).optional(),
+});
+
+export async function copyProjectTool(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = copyProjectSchema.parse(args || {});
+
+    const copyData = {
+      data: {
+        type: 'projects',
+        attributes: {
+          name: params.name,
+          template_id: parseInt(params.template_id, 10),
+          company_id: parseInt(params.company_id, 10),
+          project_type_id: params.project_type_id ?? 2,
+          copy_boards: params.copy_boards ?? true,
+          copy_task_lists: params.copy_task_lists ?? true,
+          copy_open_tasks: params.copy_open_tasks ?? true,
+          copy_closed_tasks: params.copy_closed_tasks ?? false,
+          copy_budgets: params.copy_budgets ?? false,
+          copy_deals: params.copy_deals ?? false,
+          copy_task_description: params.copy_task_description ?? true,
+          copy_assignees: params.copy_assignees ?? false,
+          copy_memberships: params.copy_memberships ?? false,
+          copy_notes: params.copy_notes ?? false,
+        },
+      },
+    };
+
+    const response = await client.copyProject(copyData);
+    const p = response.data;
+
+    return {
+      content: [{
+        type: 'text',
+        text: `Project copied successfully!\nName: ${p.attributes.name} (ID: ${p.id})\nCopied from: ${params.template_id}\nCompany ID: ${params.company_id}\nDuplication status: ${p.attributes.duplication_status || 'unknown'}`,
+      }],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`);
+    }
+    throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : 'Unknown error occurred');
+  }
+}
+
+export const copyProjectDefinition = {
+  name: 'copy_project',
+  description: 'Copy/duplicate a project from an existing project or template. This properly initializes all modules (tasks, budgets, etc.) in the new project.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      template_id: { type: 'string', description: 'ID of the source project to copy from' },
+      name: { type: 'string', description: 'Name for the new project' },
+      company_id: { type: 'string', description: 'Company ID for the new project' },
+      project_type_id: { type: 'number', description: 'Project type: 1=internal, 2=client (default: 2)', minimum: 1, maximum: 2 },
+      copy_boards: { type: 'boolean', description: 'Copy boards/folders (default: true)' },
+      copy_task_lists: { type: 'boolean', description: 'Copy task lists (default: true)' },
+      copy_open_tasks: { type: 'boolean', description: 'Copy open tasks (default: true)' },
+      copy_closed_tasks: { type: 'boolean', description: 'Copy closed tasks (default: false)' },
+      copy_budgets: { type: 'boolean', description: 'Copy budgets (default: false)' },
+      copy_deals: { type: 'boolean', description: 'Copy deals (default: false)' },
+      copy_task_description: { type: 'boolean', description: 'Copy task descriptions (default: true)' },
+      copy_assignees: { type: 'boolean', description: 'Copy task assignees (default: false)' },
+      copy_memberships: { type: 'boolean', description: 'Copy project memberships (default: false)' },
+      copy_notes: { type: 'boolean', description: 'Copy notes (default: false)' },
+    },
+    required: ['template_id', 'name', 'company_id'],
+  },
+};
+
 export const listProjectsDefinition = {
   name: 'list_projects',
   description: 'Get a list of projects from Productive.io',
@@ -388,6 +487,10 @@ export const listProjectsDefinition = {
       company_id: {
         type: 'string',
         description: 'Filter projects by company ID',
+      },
+      template: {
+        type: 'boolean',
+        description: 'Filter by template status (true = templates only, false = non-templates only)',
       },
       limit: {
         type: 'number',
