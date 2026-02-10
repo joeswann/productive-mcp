@@ -907,6 +907,17 @@ export interface ProductivePageCreate {
   };
 }
 
+export interface ProductivePageUpdate {
+  data: {
+    type: 'pages';
+    id: string;
+    attributes?: {
+      title?: string;
+      body?: string;
+    };
+  };
+}
+
 export interface ProductiveError {
   errors: Array<{
     status?: string;

@@ -409,7 +409,7 @@ export async function createTaskTool(
         relationships: {} as any,
       },
     };
-    
+
     // Add relationships if provided
     if (params.project_id) {
       taskData.data.relationships.project = {
@@ -419,7 +419,7 @@ export async function createTaskTool(
         },
       };
     }
-    
+
     if (params.board_id) {
       taskData.data.relationships.board = {
         data: {
@@ -428,7 +428,7 @@ export async function createTaskTool(
         },
       };
     }
-    
+
     if (params.task_list_id) {
       taskData.data.relationships.task_list = {
         data: {
@@ -437,7 +437,7 @@ export async function createTaskTool(
         },
       };
     }
-    
+
     if (assigneeId) {
       taskData.data.relationships.assignee = {
         data: {

@@ -14,7 +14,7 @@ import { whoAmI, whoAmITool } from './tools/whoami.js';
 import { listActivities, listActivitiesTool } from './tools/activities.js';
 import { getRecentUpdates, getRecentUpdatesTool } from './tools/recent-updates.js';
 import { addTaskCommentTool, addTaskCommentDefinition, deleteTaskCommentTool, deleteTaskCommentDefinition } from './tools/comments.js';
-import { createDocumentTool, createDocumentDefinition } from './tools/documents.js';
+import { listDocumentsTool, listDocumentsDefinition, createDocumentTool, createDocumentDefinition, updateDocumentTool, updateDocumentDefinition, deleteDocumentTool, deleteDocumentDefinition } from './tools/documents.js';
 import { updateTaskStatusTool, updateTaskStatusDefinition } from './tools/task-status.js';
 import { listWorkflowStatusesTool, listWorkflowStatusesDefinition } from './tools/workflow-statuses.js';
 import { listTimeEntresTool, createTimeEntryTool, updateTimeEntryTool, deleteTimeEntryTool, listTimeEntriesDefinition, createTimeEntryDefinition, updateTimeEntryDefinition, deleteTimeEntryDefinition } from './tools/time-entries.js';
@@ -110,7 +110,10 @@ export async function createServer() {
       createLineItemDefinition,
       finalizeInvoiceDefinition,
       deleteTaskCommentDefinition,
+      listDocumentsDefinition,
       createDocumentDefinition,
+      updateDocumentDefinition,
+      deleteDocumentDefinition,
     ],
   }));
 
@@ -302,8 +305,17 @@ export async function createServer() {
       case 'delete_task_comment':
         return await deleteTaskCommentTool(apiClient, args);
 
+      case 'list_documents':
+        return await listDocumentsTool(apiClient, args);
+
       case 'create_document':
         return await createDocumentTool(apiClient, args);
+
+      case 'update_document':
+        return await updateDocumentTool(apiClient, args);
+
+      case 'delete_document':
+        return await deleteDocumentTool(apiClient, args);
 
       default:
         throw new Error(`Unknown tool: ${name}`);

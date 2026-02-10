@@ -300,13 +300,32 @@ export async function getDealTool(
     const params = getDealSchema.parse(args);
     const response = await client.getDeal(params.id);
     const d = response.data;
-    const budgetType = d.attributes.budget ? 'Budget' : 'Deal';
+    const a = d.attributes;
+    const budgetType = a.budget ? 'Budget' : 'Deal';
     const projectId = d.relationships?.project?.data?.id;
+    const statusId = d.relationships?.deal_status?.data?.id;
+
+    const lines: string[] = [
+      `${budgetType}: ${a.name} (ID: ${d.id})`,
+      projectId ? `Project ID: ${projectId}` : '',
+      a.date ? `Date: ${a.date}` : '',
+      a.currency ? `Currency: ${a.currency}` : '',
+      a.value ? `Value: ${a.value}` : '',
+      a.total_value ? `Total Value: ${a.total_value}` : '',
+      a.invoiced_amount ? `Invoiced: ${a.invoiced_amount}` : '',
+      a.cost ? `Cost: ${a.cost}` : '',
+      a.profit ? `Profit: ${a.profit}` : '',
+      a.probability != null ? `Probability: ${a.probability}%` : '',
+      statusId ? `Deal Status ID: ${statusId}` : '',
+      a.delivered_on ? `Delivered: ${a.delivered_on}` : '',
+      a.closed_at ? `Closed: ${a.closed_at}` : '',
+      a.note ? `Note: ${a.note}` : '',
+      `Created: ${a.created_at || 'Unknown'}`,
+      a.updated_at ? `Updated: ${a.updated_at}` : '',
+    ].filter(Boolean);
+
     return {
-      content: [{
-        type: 'text',
-        text: `${budgetType}: ${d.attributes.name} (ID: ${d.id})\n${projectId ? `Project ID: ${projectId}` : ''}\n${d.attributes.value ? `Value: ${d.attributes.value}` : ''}\nCreated: ${d.attributes.created_at || 'Unknown'}`,
-      }],
+      content: [{ type: 'text', text: lines.join('\n') }],
     };
   } catch (error) {
     if (error instanceof z.ZodError) {

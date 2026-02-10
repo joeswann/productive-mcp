@@ -367,7 +367,7 @@ const updateInvoiceSchema = z.object({
   note: z.string().optional(),
   footer: z.string().optional(),
   pay_on: z.string().optional(),
-  paid_on: z.string().optional(),
+  paid_on: z.string().optional().describe('Date paid (YYYY-MM-DD). Creates a payment record — paid_on is read-only on the invoice itself.'),
   purchase_order_number: z.string().optional(),
   xero_invoice_url: z.string().optional().describe('URL to the Xero invoice (stored in export_invoice_url)'),
   tag_list: z.array(z.string()).optional(),
@@ -385,28 +385,40 @@ export async function updateInvoiceTool(
     if (params.note !== undefined) attributes.note = params.note;
     if (params.footer !== undefined) attributes.footer = params.footer;
     if (params.pay_on !== undefined) attributes.pay_on = params.pay_on;
-    if (params.paid_on !== undefined) attributes.paid_on = params.paid_on;
     if (params.purchase_order_number !== undefined) attributes.purchase_order_number = params.purchase_order_number;
     if (params.xero_invoice_url !== undefined) attributes.export_invoice_url = params.xero_invoice_url;
     if (params.tag_list !== undefined) attributes.tag_list = params.tag_list;
 
-    const updateData: ProductiveInvoiceUpdate = {
-      data: {
-        type: 'invoices',
-        id: params.id,
-        ...(Object.keys(attributes).length > 0 && { attributes }),
-      },
-    };
+    // paid_on is read-only on invoices — create a payment record instead
+    if (params.paid_on !== undefined) {
+      // First get the invoice to find its total amount
+      const invoiceResp = await client.getInvoice(params.id);
+      const invoiceTotal = invoiceResp.data.attributes.total || invoiceResp.data.attributes.amount;
+      await client.createPayment(params.id, params.paid_on, String(invoiceTotal));
+    }
 
-    const response = await client.updateInvoice(params.id, updateData);
-    const inv = response.data;
+    let inv;
+    if (Object.keys(attributes).length > 0) {
+      const updateData: ProductiveInvoiceUpdate = {
+        data: {
+          type: 'invoices',
+          id: params.id,
+          attributes,
+        },
+      };
+      const response = await client.updateInvoice(params.id, updateData);
+      inv = response.data;
+    } else {
+      const response = await client.getInvoice(params.id);
+      inv = response.data;
+    }
 
     const changes: string[] = [];
     if (params.subject !== undefined) changes.push(`Subject: ${params.subject}`);
     if (params.note !== undefined) changes.push(`Note: ${params.note}`);
     if (params.footer !== undefined) changes.push(`Footer: ${params.footer}`);
     if (params.pay_on !== undefined) changes.push(`Due date: ${params.pay_on}`);
-    if (params.paid_on !== undefined) changes.push(`Paid on: ${params.paid_on}`);
+    if (params.paid_on !== undefined) changes.push(`Payment recorded: ${params.paid_on}`);
     if (params.purchase_order_number !== undefined) changes.push(`PO: ${params.purchase_order_number}`);
     if (params.xero_invoice_url !== undefined) changes.push(`Xero URL: ${params.xero_invoice_url}`);
     if (params.tag_list !== undefined) changes.push(`Tags: ${params.tag_list.join(', ')}`);

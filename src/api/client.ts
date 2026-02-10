@@ -40,6 +40,7 @@ import {
   ProductiveLineItemCreate,
   ProductivePage,
   ProductivePageCreate,
+  ProductivePageUpdate,
 } from './types.js';
 
 export class ProductiveAPIClient {
@@ -136,7 +137,7 @@ export class ProductiveAPIClient {
     }
 
     if (params?.template !== undefined) {
-      queryParams.append('filter[template]', params.template ? 'true' : 'false');
+      queryParams.append('filter[template]', params.template ? '1' : '0');
     }
     
     if (params?.limit) {
@@ -195,6 +196,19 @@ export class ProductiveAPIClient {
     });
   }
 
+  async restoreProject(id: string): Promise<ProductiveSingleResponse<ProductiveProject>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveProject>>(`projects/${id}/restore`, {
+      method: 'PATCH',
+    });
+  }
+
+  async archiveProject(id: string): Promise<ProductiveSingleResponse<ProductiveProject>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveProject>>(`projects/${id}/archive`, {
+      method: 'PATCH',
+      body: JSON.stringify({}),
+    });
+  }
+
   async updateDeal(id: string, data: ProductiveDealUpdate): Promise<ProductiveSingleResponse<ProductiveDeal>> {
     return this.makeRequest<ProductiveSingleResponse<ProductiveDeal>>(`deals/${id}`, {
       method: 'PATCH',
@@ -238,7 +252,9 @@ export class ProductiveAPIClient {
   }
 
   async getDeal(id: string): Promise<ProductiveSingleResponse<ProductiveDeal>> {
-    return this.makeRequest<ProductiveSingleResponse<ProductiveDeal>>(`deals/${id}`);
+    return this.makeRequest<ProductiveSingleResponse<ProductiveDeal>>(
+      `deals/${id}?fields[deals]=name,budget,budget_type,date,currency,value,total_value,invoiced_amount,cost,profit,probability,delivered_on,closed_at,note,created_at,updated_at&include=deal_status,project`
+    );
   }
 
   async getCompany(id: string): Promise<ProductiveSingleResponse<ProductiveCompany>> {
@@ -965,6 +981,24 @@ export class ProductiveAPIClient {
     }
   }
 
+  // ── Tax rates ──
+
+  async listTaxRates(params?: {
+    limit?: number;
+    page?: number;
+  }): Promise<ProductiveResponse<{ id: string; type: string; attributes: Record<string, unknown> }>> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) {
+      queryParams.append('page[size]', params.limit.toString());
+    }
+    if (params?.page) {
+      queryParams.append('page[number]', params.page.toString());
+    }
+    const queryString = queryParams.toString();
+    const path = `tax_rates${queryString ? `?${queryString}` : ''}`;
+    return this.makeRequest(path);
+  }
+
   // ── Invoice methods ──
 
   async listDocumentTypes(params?: {
@@ -1038,6 +1072,21 @@ export class ProductiveAPIClient {
     });
   }
 
+  async createPayment(invoiceId: string, paidOn: string, amount: string): Promise<unknown> {
+    return this.makeRequest<unknown>('payments', {
+      method: 'POST',
+      body: JSON.stringify({
+        data: {
+          type: 'payments',
+          attributes: { paid_on: paidOn, amount },
+          relationships: {
+            invoice: { data: { type: 'invoices', id: invoiceId } },
+          },
+        },
+      }),
+    });
+  }
+
   async listInvoiceAttributions(params?: {
     invoice_id?: string;
     budget_id?: string;
@@ -1092,6 +1141,37 @@ export class ProductiveAPIClient {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  async updatePage(id: string, data: ProductivePageUpdate): Promise<ProductiveSingleResponse<ProductivePage>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductivePage>>(`pages/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deletePage(id: string): Promise<void> {
+    await this.makeRequest<void>(`pages/${id}`, { method: 'DELETE' });
+  }
+
+  async listPages(params?: {
+    project_id?: string;
+    limit?: number;
+    page?: number;
+  }): Promise<ProductiveResponse<ProductivePage>> {
+    const queryParams = new URLSearchParams();
+    if (params?.project_id) {
+      queryParams.append('filter[project_id]', params.project_id);
+    }
+    if (params?.limit) {
+      queryParams.append('page[size]', params.limit.toString());
+    }
+    if (params?.page) {
+      queryParams.append('page[number]', params.page.toString());
+    }
+    const queryString = queryParams.toString();
+    const path = `pages${queryString ? `?${queryString}` : ''}`;
+    return this.makeRequest<ProductiveResponse<ProductivePage>>(path);
   }
 
   async finalizeInvoice(id: string): Promise<ProductiveSingleResponse<ProductiveInvoice>> {

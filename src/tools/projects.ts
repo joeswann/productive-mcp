@@ -13,7 +13,7 @@ const createProjectSchema = z.object({
 });
 
 const listProjectsSchema = z.object({
-  status: z.enum(['active', 'archived']).optional(),
+  status: z.enum(['active', 'archived', 'all']).default('all').optional(),
   company_id: z.string().optional(),
   template: z.preprocess(val => val === 'true' ? true : val === 'false' ? false : val, z.boolean()).optional(),
   limit: z.number().min(1).max(200).default(30).optional(),
@@ -25,15 +25,27 @@ export async function listProjectsTool(
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   try {
     const params = listProjectsSchema.parse(args || {});
-    
-    const response = await client.listProjects({
-      status: params.status,
-      company_id: params.company_id,
-      template: params.template,
-      limit: params.limit,
-    });
-    
-    if (!response || !response.data || response.data.length === 0) {
+
+    let allData: Array<{ id: string; attributes: Record<string, unknown>; relationships?: Record<string, unknown> }> = [];
+
+    if (params.status === 'all' || !params.status) {
+      // Fetch both active and archived
+      const [activeResp, archivedResp] = await Promise.all([
+        client.listProjects({ status: 'active', company_id: params.company_id, template: params.template, limit: params.limit }),
+        client.listProjects({ status: 'archived', company_id: params.company_id, template: params.template, limit: params.limit }),
+      ]);
+      allData = [...(activeResp?.data || []), ...(archivedResp?.data || [])];
+    } else {
+      const response = await client.listProjects({
+        status: params.status,
+        company_id: params.company_id,
+        template: params.template,
+        limit: params.limit,
+      });
+      allData = response?.data || [];
+    }
+
+    if (allData.length === 0) {
       return {
         content: [{
           type: 'text',
@@ -41,16 +53,17 @@ export async function listProjectsTool(
         }],
       };
     }
-    
-    const projectsText = response.data.filter(project => project && project.attributes).map(project => {
-      const companyId = project.relationships?.company?.data?.id;
-      return `• ${project.attributes.name} (ID: ${project.id})
+
+    const projectsText = allData.filter(project => project && project.attributes).map(project => {
+      const companyId = (project.relationships?.company as { data?: { id?: string } } | undefined)?.data?.id;
+      const isArchived = project.attributes.archived_at || project.attributes.status === 'archived';
+      return `• ${project.attributes.name} (ID: ${project.id})${isArchived ? ' [ARCHIVED]' : ''}
   Status: ${project.attributes.status}
   ${companyId ? `Company ID: ${companyId}` : ''}
   ${project.attributes.description ? `Description: ${project.attributes.description}` : 'No description'}`;
     }).join('\n\n');
-    
-    const summary = `Found ${response.data.length} project${response.data.length !== 1 ? 's' : ''}${response.meta?.total_count ? ` (showing ${response.data.length} of ${response.meta.total_count})` : ''}:\n\n${projectsText}`;
+
+    const summary = `Found ${allData.length} project${allData.length !== 1 ? 's' : ''}:\n\n${projectsText}`;
     
     return {
       content: [{
@@ -238,7 +251,15 @@ export async function updateProjectTool(
     if (params.project_type_id) attributes.project_type_id = params.project_type_id;
     if (params.workflow_id) attributes.workflow_id = parseInt(params.workflow_id, 10);
     if (params.preferences) attributes.preferences = params.preferences;
-    if (params.archived_at) attributes.archived_at = params.archived_at;
+    const isUnarchive = params.archived_at === '';
+    const isArchive = !!params.archived_at && params.archived_at !== '';
+
+    // Archive and unarchive use dedicated endpoints
+    if (isUnarchive) {
+      await client.restoreProject(params.id);
+    } else if (isArchive) {
+      await client.archiveProject(params.id);
+    }
 
     const updateData: ProductiveProjectUpdate = {
       data: {
@@ -258,8 +279,16 @@ export async function updateProjectTool(
       },
     };
 
-    const response = await client.updateProject(params.id, updateData);
-    const project = response.data;
+    // Call updateProject if there are attributes or relationships beyond unarchiving
+    let project;
+    if (Object.keys(attributes).length > 0 || params.company_id) {
+      const response = await client.updateProject(params.id, updateData);
+      project = response.data;
+    } else {
+      // Only unarchive was requested — fetch current state
+      const getResponse = await client.getProject(params.id);
+      project = getResponse?.data;
+    }
 
     const changes: string[] = [];
     if (params.name) changes.push(`Name: ${params.name}`);
@@ -268,7 +297,8 @@ export async function updateProjectTool(
     if (params.project_type_id) changes.push(`Project Type: ${params.project_type_id}`);
     if (params.workflow_id) changes.push(`Workflow ID: ${params.workflow_id}`);
     if (params.preferences) changes.push(`Preferences: ${JSON.stringify(params.preferences)}`);
-    if (params.archived_at) changes.push(`Archived at: ${params.archived_at}`);
+    if (params.archived_at === '') changes.push('Unarchived');
+    else if (params.archived_at) changes.push(`Archived at: ${params.archived_at}`);
 
     return {
       content: [{
@@ -475,14 +505,14 @@ export const copyProjectDefinition = {
 
 export const listProjectsDefinition = {
   name: 'list_projects',
-  description: 'Get a list of projects from Productive.io',
+  description: 'Get a list of projects from Productive.io. Defaults to showing ALL projects (active + archived). IMPORTANT: Always check archived projects before creating new ones to avoid duplicates.',
   inputSchema: {
     type: 'object',
     properties: {
       status: {
         type: 'string',
-        enum: ['active', 'archived'],
-        description: 'Filter by project status',
+        enum: ['active', 'archived', 'all'],
+        description: 'Filter by project status. Defaults to "all" (both active and archived). Use "active" or "archived" to filter.',
       },
       company_id: {
         type: 'string',
