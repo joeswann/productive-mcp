@@ -6,6 +6,8 @@ const ListActivitiesRequestSchema = z.object({
   task_id: z.string().optional(),
   project_id: z.string().optional(),
   person_id: z.string().optional(),
+  creator_id: z.string().optional(),
+  company_id: z.string().optional(),
   item_type: z.string().optional(),
   event: z.string().optional(),
   after: z.string().optional(), // ISO 8601 date string
@@ -34,6 +36,8 @@ export async function listActivities(
       task_id: params.task_id,
       project_id: params.project_id,
       person_id: params.person_id,
+      creator_id: params.creator_id,
+      company_id: params.company_id,
       item_type: params.item_type,
       event: params.event,
       after,
@@ -42,19 +46,28 @@ export async function listActivities(
       page: params.page,
     });
 
+    // Build lookup map for creator names from included data
+    const included = response.included || [];
+    const peopleMap = new Map<string, string>();
+    for (const inc of included) {
+      if (inc.type === 'people') {
+        peopleMap.set(inc.id, `${inc.attributes?.first_name || ''} ${inc.attributes?.last_name || ''}`.trim());
+      }
+    }
+
     const activities = response.data;
     let output = `Found ${activities.length} activities`;
-    
+
     if (response.meta?.total_count) {
       output += ` (${response.meta.total_count} total)`;
     }
-    
+
     if (params.days_back) {
       output += ` from the last ${params.days_back} days`;
     } else if (after || params.before) {
       output += ` within specified date range`;
     }
-    
+
     output += ':\n\n';
 
     if (activities.length === 0) {
@@ -65,20 +78,22 @@ export async function listActivities(
         const event = activity.attributes.event;
         const itemType = activity.attributes.item_type;
         const itemId = activity.attributes.item_id;
-        
+
         output += `• ${createdAt} - ${event} ${itemType} (ID: ${itemId})`;
-        
+
         if (activity.attributes.changes && Object.keys(activity.attributes.changes).length > 0) {
           const changes = Object.entries(activity.attributes.changes)
             .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
             .join(', ');
           output += `\n  Changes: ${changes}`;
         }
-        
-        if (activity.relationships?.creator?.data?.id) {
-          output += `\n  Creator: Person ID ${activity.relationships.creator.data.id}`;
+
+        const creatorId = activity.relationships?.creator?.data?.id;
+        if (creatorId) {
+          const creatorName = peopleMap.get(creatorId);
+          output += `\n  Creator: ${creatorName || `Person ID ${creatorId}`}`;
         }
-        
+
         output += '\n\n';
       }
     }
@@ -112,7 +127,7 @@ export async function listActivities(
 
 export const listActivitiesTool = {
   name: 'list_activities',
-  description: 'List activities (changes/updates) from Productive.io with filtering options for tracking recent work',
+  description: 'List activities (changes/updates) from Productive.io with filtering options for tracking recent work. Includes creator names. Use creator_id to filter by who made the change, person_id to filter by who is involved.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -121,12 +136,20 @@ export const listActivitiesTool = {
         description: 'Filter activities for a specific task ID',
       },
       project_id: {
-        type: 'string', 
+        type: 'string',
         description: 'Filter activities for a specific project ID',
       },
       person_id: {
         type: 'string',
-        description: 'Filter activities by a specific person/user ID',
+        description: 'Filter activities involving a specific person/user ID',
+      },
+      creator_id: {
+        type: 'string',
+        description: 'Filter activities created by a specific person ID',
+      },
+      company_id: {
+        type: 'string',
+        description: 'Filter activities for a specific company ID',
       },
       item_type: {
         type: 'string',

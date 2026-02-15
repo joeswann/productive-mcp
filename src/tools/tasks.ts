@@ -7,6 +7,11 @@ const listTasksSchema = z.object({
   project_id: z.string().optional(),
   assignee_id: z.string().optional(),
   status: z.enum(['open', 'closed']).optional(),
+  closed_after: z.string().optional(),
+  closed_before: z.string().optional(),
+  last_activity_after: z.string().optional(),
+  last_activity_before: z.string().optional(),
+  sort: z.string().optional(),
   limit: z.number().min(1).max(200).default(30).optional(),
 });
 
@@ -30,9 +35,14 @@ export async function listTasksTool(
       project_id: params.project_id,
       assignee_id: params.assignee_id,
       status: params.status,
+      closed_after: params.closed_after,
+      closed_before: params.closed_before,
+      last_activity_after: params.last_activity_after,
+      last_activity_before: params.last_activity_before,
+      sort: params.sort,
       limit: params.limit,
     });
-    
+
     if (!response || !response.data || response.data.length === 0) {
       return {
         content: [{
@@ -41,34 +51,41 @@ export async function listTasksTool(
         }],
       };
     }
-    
+
     // Build lookup maps from included relationships
-    const included = (response as any).included || [];
+    const included = response.included || [];
     const peopleMap = new Map<string, string>();
     const statusMap = new Map<string, string>();
+    const projectMap = new Map<string, string>();
     for (const inc of included) {
       if (inc.type === 'people') peopleMap.set(inc.id, `${inc.attributes?.first_name || ''} ${inc.attributes?.last_name || ''}`.trim());
-      if (inc.type === 'workflow_statuses') statusMap.set(inc.id, inc.attributes?.name || '');
+      if (inc.type === 'workflow_statuses') statusMap.set(inc.id, String(inc.attributes?.name || ''));
+      if (inc.type === 'projects') projectMap.set(inc.id, String(inc.attributes?.name || ''));
     }
 
     const tasksText = response.data.filter(task => task && task.attributes).map(task => {
       const projectId = task.relationships?.project?.data?.id;
-      // Handle both singular 'assignee' and plural 'assignees' relationship formats
+      const projectName = projectId ? projectMap.get(projectId) : undefined;
       const assigneeData = task.relationships?.assignee?.data;
-      const assignees = task.relationships?.assignees?.data;
       let assigneeText = 'Unassigned';
       if (assigneeData) {
         assigneeText = peopleMap.get(assigneeData.id) || `ID:${assigneeData.id}`;
-      } else if (Array.isArray(assignees) && assignees.length > 0) {
-        assigneeText = assignees.map((a: any) => peopleMap.get(a.id) || `ID:${a.id}`).join(', ');
       }
       const wsId = task.relationships?.workflow_status?.data?.id;
       const statusText = wsId && statusMap.get(wsId) ? statusMap.get(wsId) : (task.attributes.status === 1 ? 'open' : task.attributes.status === 2 ? 'closed' : `status ${task.attributes.status}`);
-      return `• ${task.attributes.title} (ID: ${task.id})
-  Status: ${statusText} | Assignee: ${assigneeText}
-  ${task.attributes.due_date ? `Due: ${task.attributes.due_date}` : 'No due date'}
-  ${projectId ? `Project ID: ${projectId}` : ''}
-  ${task.attributes.worked_time ? `Tracked: ${(task.attributes.worked_time / 60).toFixed(1)}h` : 'No time tracked'}`;
+
+      let line = `• ${task.attributes.title} (ID: ${task.id})
+  Status: ${statusText} | Assignee: ${assigneeText}`;
+      if (projectName) {
+        line += `\n  Project: ${projectName} (ID: ${projectId})`;
+      } else if (projectId) {
+        line += `\n  Project ID: ${projectId}`;
+      }
+      if (task.attributes.due_date) line += `\n  Due: ${task.attributes.due_date}`;
+      if (task.attributes.closed_at) line += `\n  Closed: ${task.attributes.closed_at}`;
+      if (task.attributes.last_activity_at) line += `\n  Last Activity: ${task.attributes.last_activity_at}`;
+      if (task.attributes.worked_time) line += `\n  Tracked: ${(task.attributes.worked_time / 60).toFixed(1)}h`;
+      return line;
     }).join('\n\n');
     
     const summary = `Found ${response.data.length} task${response.data.length !== 1 ? 's' : ''}${response.meta?.total_count ? ` (showing ${response.data.length} of ${response.meta.total_count})` : ''}:\n\n${tasksText}`;
@@ -117,23 +134,19 @@ export async function getProjectTasksTool(
     }
     
     // Build lookup maps from included relationships
-    const included = (response as any).included || [];
+    const included = response.included || [];
     const peopleMap = new Map<string, string>();
     const statusMap = new Map<string, string>();
     for (const inc of included) {
       if (inc.type === 'people') peopleMap.set(inc.id, `${inc.attributes?.first_name || ''} ${inc.attributes?.last_name || ''}`.trim());
-      if (inc.type === 'workflow_statuses') statusMap.set(inc.id, inc.attributes?.name || '');
+      if (inc.type === 'workflow_statuses') statusMap.set(inc.id, String(inc.attributes?.name || ''));
     }
 
     const tasksText = response.data.filter(task => task && task.attributes).map(task => {
-      // Handle both singular 'assignee' and plural 'assignees' relationship formats
       const assigneeData = task.relationships?.assignee?.data;
-      const assignees = task.relationships?.assignees?.data;
       let assigneeText = 'Unassigned';
       if (assigneeData) {
         assigneeText = peopleMap.get(assigneeData.id) || `ID:${assigneeData.id}`;
-      } else if (Array.isArray(assignees) && assignees.length > 0) {
-        assigneeText = assignees.map((a: any) => peopleMap.get(a.id) || `ID:${a.id}`).join(', ');
       }
       const wsId = task.relationships?.workflow_status?.data?.id;
       const statusText = wsId && statusMap.get(wsId) ? statusMap.get(wsId) : (task.attributes.status === 1 ? 'open' : task.attributes.status === 2 ? 'closed' : `status ${task.attributes.status}`);
@@ -173,113 +186,80 @@ export async function getTaskTool(
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   try {
     const params = getTaskSchema.parse(args);
-    
-    // Import and use config directly
-    const config = await import('../config/index.js').then(m => m.getConfig());
-    
-    // Create URL with task_list included
-    const url = `${config.PRODUCTIVE_API_BASE_URL}tasks/${params.task_id}?include=task_list`;
-    
-    // Create request with proper headers from config
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'X-Auth-Token': config.PRODUCTIVE_API_TOKEN,
-        'X-Organization-Id': config.PRODUCTIVE_ORG_ID,
-        'Content-Type': 'application/vnd.api+json',
-      }
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to get task: ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    const task = data.data;
+
+    const response = await client.getTask(params.task_id, { include: 'task_list' });
+    const task = response.data;
     const projectId = task.relationships?.project?.data?.id;
     const assigneeId = task.relationships?.assignee?.data?.id;
     const taskListId = task.relationships?.task_list?.data?.id;
-    
-    // Handle status using the 'closed' field from actual API response
+
     const statusText = task.attributes.closed === false ? 'open' : task.attributes.closed === true ? 'closed' : 'unknown';
-    
+
     let text = `Task Details:\n\n`;
     text += `Title: ${task.attributes.title}\n`;
     text += `ID: ${task.id}\n`;
     text += `Status: ${statusText}\n`;
-    
+
     if (task.attributes.description) {
       text += `Description: ${task.attributes.description}\n`;
     }
-    
-    if (task.attributes.due_date) {
-      text += `Due Date: ${task.attributes.due_date}\n`;
-    } else {
-      text += `Due Date: No due date set\n`;
-    }
-    
+
+    text += `Due Date: ${task.attributes.due_date || 'No due date set'}\n`;
+
     if (projectId) {
       text += `Project ID: ${projectId}\n`;
     }
-    
+
     if (assigneeId) {
       text += `Assignee ID: ${assigneeId}\n`;
     } else {
       text += `Assignee: Unassigned\n`;
     }
-    
+
     if (task.attributes.created_at) {
       text += `Created: ${task.attributes.created_at}\n`;
     }
-    
+
     if (task.attributes.updated_at) {
       text += `Updated: ${task.attributes.updated_at}\n`;
     }
-    
-    // Include any additional attributes that might be useful
+
     if (task.attributes.priority !== undefined) {
       text += `Priority: ${task.attributes.priority}\n`;
     }
-    
+
     if (task.attributes.placement !== undefined) {
       text += `Position: ${task.attributes.placement}\n`;
     }
-    
-    // Add useful additional fields from actual API response
+
     if (task.attributes.task_number) {
       text += `Task Number: ${task.attributes.task_number}\n`;
     }
-    
+
     if (task.attributes.private !== undefined) {
       text += `Private: ${task.attributes.private ? 'Yes' : 'No'}\n`;
     }
-    
+
     if (task.attributes.initial_estimate) {
       text += `Initial Estimate: ${task.attributes.initial_estimate}\n`;
     }
-    
+
     if (task.attributes.worked_time) {
       text += `Worked Time: ${task.attributes.worked_time}\n`;
     }
-    
+
     if (task.attributes.last_activity_at) {
       text += `Last Activity: ${task.attributes.last_activity_at}\n`;
     }
-    
-    // Include task list ID information if available
+
     if (taskListId) {
       text += `Task List ID: ${taskListId}\n`;
-      
-    // If there's included data for the task list, include the name
-    console.log('Included data:', JSON.stringify(data.included));
-    if (data.included && Array.isArray(data.included)) {
-      const taskList = data.included.find((item: any) => item.type === 'task_lists' && item.id === taskListId);
+      const taskList = response.included?.find(item => item.type === 'task_lists' && item.id === taskListId);
       if (taskList) {
         text += `Task List: ${taskList.attributes.name}\n`;
       }
     }
-    }
-    
+
     return {
       content: [{
         type: 'text',
@@ -293,7 +273,7 @@ export async function getTaskTool(
         `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`
       );
     }
-    
+
     throw new McpError(
       ErrorCode.InternalError,
       error instanceof Error ? error.message : 'Unknown error occurred'
@@ -303,7 +283,7 @@ export async function getTaskTool(
 
 export const listTasksDefinition = {
   name: 'list_tasks',
-  description: 'Get a list of tasks from Productive.io',
+  description: 'Get a list of tasks from Productive.io. Includes project name, assignee, workflow status, and date fields (closed_at, last_activity_at). Supports date-range filters and sorting.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -319,6 +299,26 @@ export const listTasksDefinition = {
         type: 'string',
         enum: ['open', 'closed'],
         description: 'Filter by task status (open or closed)',
+      },
+      closed_after: {
+        type: 'string',
+        description: 'Filter tasks closed after this date (YYYY-MM-DD)',
+      },
+      closed_before: {
+        type: 'string',
+        description: 'Filter tasks closed before this date (YYYY-MM-DD)',
+      },
+      last_activity_after: {
+        type: 'string',
+        description: 'Filter tasks with last activity after this date (YYYY-MM-DD)',
+      },
+      last_activity_before: {
+        type: 'string',
+        description: 'Filter tasks with last activity before this date (YYYY-MM-DD)',
+      },
+      sort: {
+        type: 'string',
+        description: 'Sort field. Prefix with - for descending. Options: created_at, updated_at, closed_at, last_activity_at, due_date, title, worked_time, project_name. Example: -last_activity_at',
       },
       limit: {
         type: 'number',

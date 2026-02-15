@@ -191,6 +191,8 @@ const updateDealSchema = z.object({
   budget_type: z.number().int().min(1).max(2).optional().describe('1=deal, 2=budget'),
   note: z.string().optional(),
   value: z.string().optional().describe('Budget/deal value as string (e.g. "3220.0")'),
+  reopen: z.boolean().optional().describe('Set to true to reopen a closed budget/deal (clears closed_at)'),
+  closed_at: z.string().optional().describe('Set closed_at date (ISO 8601 datetime, e.g. "2026-02-10T00:00:00.000+13:00") to close/re-close a deal'),
 });
 
 export async function updateDealTool(
@@ -218,6 +220,18 @@ export async function updateDealTool(
     if (params.budget_type !== undefined) attributes.budget_type = params.budget_type;
     if (params.note) attributes.note = params.note;
     if (params.value !== undefined) attributes.value = params.value;
+    if (params.closed_at) attributes.closed_at = params.closed_at;
+    // Use dedicated /open endpoint for reopening closed deals
+    if (params.reopen) {
+      try {
+        await client.openDeal(params.id);
+      } catch (e) {
+        // /open endpoint may not exist, return error info
+        return {
+          content: [{ type: 'text', text: `Failed to reopen deal: ${e instanceof Error ? e.message : String(e)}` }],
+        };
+      }
+    }
 
     const relationships: ProductiveDealUpdate['data']['relationships'] = {};
     if (params.company_id) relationships.company = { data: { id: params.company_id, type: 'companies' } };
@@ -233,7 +247,11 @@ export async function updateDealTool(
       },
     };
 
-    const response = await client.updateDeal(params.id, updateData);
+    // Only call updateDeal if there are other changes besides reopen
+    const hasOtherChanges = Object.keys(attributes).length > 0 || Object.keys(relationships).length > 0;
+    const response = hasOtherChanges
+      ? await client.updateDeal(params.id, updateData)
+      : await client.getDeal(params.id);
     const deal = response.data;
 
     const changes: string[] = [];
@@ -248,6 +266,8 @@ export async function updateDealTool(
     if (params.budget_type !== undefined) changes.push(`Budget Type: ${params.budget_type === 1 ? 'Deal' : 'Budget'}`);
     if (params.note) changes.push(`Note: ${params.note}`);
     if (params.value !== undefined) changes.push(`Value: ${params.value}`);
+    if (params.reopen) changes.push('Reopened (cleared closed_at)');
+    if (params.closed_at) changes.push(`Closed at: ${params.closed_at}`);
 
     return {
       content: [{
@@ -281,6 +301,8 @@ export const updateDealDefinition = {
       budget_type: { type: 'number', description: 'Budget type: 1=deal, 2=budget', minimum: 1, maximum: 2 },
       note: { type: 'string', description: 'New note' },
       value: { type: 'string', description: 'Budget/deal value as string (e.g. "3220.0")' },
+      reopen: { type: 'boolean', description: 'Set to true to reopen a closed budget/deal (clears closed_at)' },
+      closed_at: { type: 'string', description: 'Set closed_at date (ISO 8601 datetime, e.g. "2026-02-10T00:00:00.000+13:00") to close/re-close a deal' },
     },
     required: ['id'],
   },

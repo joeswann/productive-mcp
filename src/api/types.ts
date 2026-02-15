@@ -12,10 +12,10 @@ export interface ProductiveCompany {
     tag_list?: string[];
     created_at: string;
     updated_at: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   relationships?: {
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -26,9 +26,10 @@ export interface ProductiveProject {
     name: string;
     description?: string;
     status: 'active' | 'archived';
+    archived_at?: string | null;
     created_at: string;
     updated_at: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   relationships?: {
     company?: {
@@ -37,7 +38,7 @@ export interface ProductiveProject {
         type: 'companies';
       };
     };
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -50,9 +51,16 @@ export interface ProductiveTask {
     status?: number; // 1 = open, 2 = closed (for API requests)
     closed?: boolean; // false = open, true = closed (from API responses)
     due_date?: string;
+    priority?: number;
+    placement?: number;
+    task_number?: number;
+    private?: boolean;
+    initial_estimate?: number;
+    worked_time?: number;
+    last_activity_at?: string;
     created_at: string;
     updated_at: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   relationships?: {
     project?: {
@@ -67,12 +75,32 @@ export interface ProductiveTask {
         type: 'people';
       };
     };
-    [key: string]: any;
+    task_list?: {
+      data: {
+        id: string;
+        type: 'task_lists';
+      };
+    };
+    workflow_status?: {
+      data: {
+        id: string;
+        type: 'workflow_statuses';
+      };
+    };
+    [key: string]: unknown;
   };
+}
+
+export interface ProductiveIncludedResource {
+  id: string;
+  type: string;
+  attributes: Record<string, unknown>;
+  relationships?: Record<string, unknown>;
 }
 
 export interface ProductiveResponse<T> {
   data: T[];
+  included?: ProductiveIncludedResource[];
   links?: {
     first?: string;
     last?: string;
@@ -95,7 +123,7 @@ export interface ProductiveBoard {
     position?: number;
     created_at: string;
     updated_at: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   relationships?: {
     project?: {
@@ -104,7 +132,7 @@ export interface ProductiveBoard {
         type: 'projects';
       };
     };
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -155,7 +183,7 @@ export interface ProductiveTaskList {
     position?: number;
     created_at: string;
     updated_at: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   relationships?: {
     board?: {
@@ -164,7 +192,7 @@ export interface ProductiveTaskList {
         type: 'boards';
       };
     };
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -220,7 +248,7 @@ export interface ProductiveTaskUpdate {
       description?: string;
       due_date?: string;
       status?: number;
-      custom_fields?: Record<string, any>;
+      custom_fields?: Record<string, unknown>;
     };
     relationships?: {
       assignee?: {
@@ -247,6 +275,7 @@ export interface ProductiveTaskUpdate {
 
 export interface ProductiveSingleResponse<T> {
   data: T;
+  included?: ProductiveIncludedResource[];
 }
 
 export interface ProductivePerson {
@@ -262,7 +291,7 @@ export interface ProductivePerson {
     avatar_url?: string;
     created_at: string;
     updated_at: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   relationships?: {
     company?: {
@@ -271,7 +300,7 @@ export interface ProductivePerson {
         type: 'companies';
       };
     };
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -282,9 +311,9 @@ export interface ProductiveActivity {
     event: string; // 'create', 'update', 'delete', etc.
     item_type: string; // 'Task', 'Project', 'Workspace', etc.
     item_id: string;
-    changes?: Record<string, any>;
+    changes?: Record<string, unknown>;
     created_at: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   relationships?: {
     organization?: {
@@ -299,7 +328,7 @@ export interface ProductiveActivity {
         type: 'people';
       };
     };
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -316,9 +345,9 @@ export interface ProductiveComment {
     edited_at?: string;
     hidden?: boolean;
     pinned_at?: string;
-    reactions?: Record<string, any>;
+    reactions?: Record<string, unknown>;
     version_number?: number;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   relationships?: {
     creator?: {
@@ -333,7 +362,7 @@ export interface ProductiveComment {
         type: 'tasks';
       };
     };
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -364,7 +393,7 @@ export interface ProductiveWorkflowStatus {
     category_id: number; // 1=not started, 2=started, 3=closed
     created_at: string;
     updated_at: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   relationships?: {
     workflow?: {
@@ -373,7 +402,7 @@ export interface ProductiveWorkflowStatus {
         type: 'workflows';
       };
     };
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -388,9 +417,20 @@ export interface ProductiveService {
     name: string;
     description?: string;
     is_active?: boolean;
+    billing_type_id?: number; // 1=Fixed, 2=Time & Materials, 3=Not Billable
+    unit_id?: number; // 1=Hour, 2=Piece, 3=Day
+    price?: number; // Price in cents
+    quantity?: number;
+    billable?: boolean;
+    worked_time?: number;
+    budgeted_time?: number;
+    revenue?: number;
+    expense_tracking_enabled?: boolean;
+    time_tracking_enabled?: boolean;
+    booking_tracking_enabled?: boolean;
     created_at: string;
     updated_at: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   relationships?: {
     company?: {
@@ -399,7 +439,13 @@ export interface ProductiveService {
         type: 'companies';
       };
     };
-    [key: string]: any;
+    deal?: {
+      data: {
+        id: string;
+        type: 'deals';
+      };
+    };
+    [key: string]: unknown;
   };
 }
 
@@ -417,7 +463,7 @@ export interface ProductiveTimeEntry {
     note?: string; // Description of work performed
     created_at: string;
     updated_at: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   relationships?: {
     person?: {
@@ -444,7 +490,7 @@ export interface ProductiveTimeEntry {
         type: 'projects';
       };
     };
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -458,9 +504,20 @@ export interface ProductiveDeal {
     name: string;
     budget_type?: number; // 1: deal, 2: budget
     value?: number;
+    total_value?: number;
+    invoiced_amount?: number;
+    cost?: number;
+    profit?: number;
+    probability?: number;
+    budget?: boolean;
+    currency?: string;
+    date?: string;
+    delivered_on?: string;
+    closed_at?: string | null;
+    note?: string;
     created_at?: string;
     updated_at?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   relationships?: {
     project?: {
@@ -475,7 +532,13 @@ export interface ProductiveDeal {
         type: 'services';
       }>;
     };
-    [key: string]: any;
+    deal_status?: {
+      data?: {
+        id: string;
+        type: 'deal_statuses';
+      };
+    };
+    [key: string]: unknown;
   };
 }
 
@@ -648,6 +711,7 @@ export interface ProductiveDealUpdate {
       budget_type?: number;
       note?: string;
       value?: string;
+      closed_at?: string | null;
     };
     relationships?: {
       company?: {
@@ -701,6 +765,15 @@ export interface ProductiveTimeEntryUpdate {
       time?: number;
       billable_time?: number;
       note?: string;
+    };
+    relationships?: {
+      task?: {
+        data: { id: string; type: 'tasks' } | null;
+      };
+      service?: {
+        data: { id: string; type: 'services' };
+      };
+      [key: string]: { data: { id: string; type: string } | null } | undefined;
     };
   };
 }
@@ -916,6 +989,293 @@ export interface ProductivePageUpdate {
       body?: string;
     };
   };
+}
+
+// Expense types
+
+export interface ProductiveExpense {
+  id: string;
+  type: 'expenses';
+  attributes: {
+    name: string;
+    amount: string;
+    billable_amount?: string;
+    currency: string;
+    date: string;
+    approved?: boolean;
+    approved_at?: string;
+    invoiced?: boolean;
+    draft?: boolean;
+    note?: string;
+    created_at?: string;
+    updated_at?: string;
+    [key: string]: unknown;
+  };
+  relationships?: {
+    service?: { data: { id: string; type: 'services' } };
+    person?: { data: { id: string; type: 'people' } };
+    deal?: { data: { id: string; type: 'deals' } };
+    [key: string]: unknown;
+  };
+}
+
+export interface ProductiveExpenseCreate {
+  data: {
+    type: 'expenses';
+    attributes: {
+      name: string;
+      amount: string;
+      billable_amount?: string;
+      currency: string;
+      date: string;
+    };
+    relationships: {
+      service: { data: { id: string; type: 'services' } };
+      person?: { data: { id: string; type: 'people' } };
+    };
+  };
+}
+
+// Rate Card types
+
+export interface ProductiveRateCard {
+  id: string;
+  type: 'rate_cards';
+  attributes: {
+    name: string;
+    created_at: string;
+    updated_at: string;
+    archived_at?: string | null;
+    prices_count?: number;
+    [key: string]: unknown;
+  };
+  relationships?: {
+    company?: { data: { id: string; type: 'companies' } };
+    creator?: { data: { id: string; type: 'people' } };
+    [key: string]: unknown;
+  };
+}
+
+export interface ProductiveRateCardCreate {
+  data: {
+    type: 'rate_cards';
+    attributes: {
+      name: string;
+    };
+    relationships: {
+      company: { data: { id: string; type: 'companies' } };
+    };
+  };
+}
+
+// Price types
+
+export interface ProductivePrice {
+  id: string;
+  type: 'prices';
+  attributes: {
+    name: string;
+    unit_id?: number;
+    rate?: number;
+    currency?: string;
+    quantity?: number;
+    billing_type_id?: number;
+    description?: string;
+    discount?: number;
+    markup?: number;
+    time_tracking_enabled?: boolean;
+    booking_tracking_enabled?: boolean;
+    expense_tracking_enabled?: boolean;
+    budget_cap_enabled?: boolean;
+    estimated_hours?: number;
+    estimated_cost?: number;
+    updated_at?: string;
+    [key: string]: unknown;
+  };
+  relationships?: {
+    rate_card?: { data: { id: string; type: 'rate_cards' } };
+    company?: { data: { id: string; type: 'companies' } };
+    service_type?: { data: { id: string; type: 'service_types' } };
+    [key: string]: unknown;
+  };
+}
+
+export interface ProductivePriceCreate {
+  data: {
+    type: 'prices';
+    attributes: {
+      name: string;
+      unit_id: number;
+      rate: number;
+      currency: string;
+      quantity?: number;
+      billing_type_id?: number;
+      description?: string;
+      discount?: number;
+      markup?: number;
+      time_tracking_enabled?: boolean;
+      booking_tracking_enabled?: boolean;
+      expense_tracking_enabled?: boolean;
+    };
+    relationships: {
+      company: { data: { id: string; type: 'companies' } };
+      service_type: { data: { id: string; type: 'service_types' } };
+      rate_card: { data: { id: string; type: 'rate_cards' } };
+    };
+  };
+}
+
+export interface ProductivePriceUpdate {
+  data: {
+    type: 'prices';
+    id: string;
+    attributes?: {
+      name?: string;
+      rate?: number;
+      currency?: string;
+      quantity?: number;
+      billing_type_id?: number;
+      description?: string;
+      discount?: number;
+      markup?: number;
+      time_tracking_enabled?: boolean;
+      booking_tracking_enabled?: boolean;
+      expense_tracking_enabled?: boolean;
+    };
+  };
+}
+
+// Todo types
+
+export interface ProductiveTodo {
+  id: string;
+  type: 'todos';
+  attributes: {
+    description: string;
+    closed?: boolean;
+    closed_at?: string | null;
+    due_date?: string | null;
+    due_time?: string | null;
+    position?: number;
+    created_at: string;
+    todoable_type?: string;
+    [key: string]: unknown;
+  };
+  relationships?: {
+    assignee?: { data: { id: string; type: 'people' } };
+    task?: { data: { id: string; type: 'tasks' } };
+    deal?: { data: { id: string; type: 'deals' } };
+    [key: string]: unknown;
+  };
+}
+
+export interface ProductiveTodoCreate {
+  data: {
+    type: 'todos';
+    attributes: {
+      description: string;
+      due_date?: string;
+      due_time?: string;
+    };
+    relationships: {
+      assignee: { data: { id: string; type: 'people' } };
+      task?: { data: { id: string; type: 'tasks' } };
+      deal?: { data: { id: string; type: 'deals' } };
+    };
+  };
+}
+
+export interface ProductiveTodoUpdate {
+  data: {
+    type: 'todos';
+    id: string;
+    attributes?: {
+      description?: string;
+      closed?: boolean;
+      due_date?: string | null;
+    };
+  };
+}
+
+// Booking types
+
+export interface ProductiveBooking {
+  id: string;
+  type: 'bookings';
+  attributes: {
+    started_on: string;
+    ended_on: string;
+    time?: number; // minutes per day
+    total_time?: number; // total minutes
+    percentage?: number;
+    booking_method_id?: number; // 1=Per day, 2=Percentage, 3=Total hours
+    note?: string;
+    draft?: boolean;
+    approved?: boolean;
+    approved_at?: string | null;
+    rejected?: boolean;
+    rejected_reason?: string | null;
+    canceled?: boolean;
+    autotracking?: boolean;
+    custom_fields?: Record<string, unknown>;
+    created_at?: string;
+    updated_at?: string;
+    [key: string]: unknown;
+  };
+  relationships?: {
+    person?: { data: { id: string; type: 'people' } };
+    service?: { data: { id: string; type: 'services' } };
+    event?: { data: { id: string; type: 'events' } };
+    task?: { data: { id: string; type: 'tasks' } };
+    [key: string]: unknown;
+  };
+}
+
+export interface ProductiveBookingCreate {
+  data: {
+    type: 'bookings';
+    attributes: {
+      started_on: string;
+      ended_on: string;
+      time?: number;
+      total_time?: number;
+      percentage?: number;
+      booking_method_id?: number;
+      note?: string;
+      draft?: boolean;
+    };
+    relationships: {
+      person: { data: { id: string; type: 'people' } };
+      service?: { data: { id: string; type: 'services' } };
+      event?: { data: { id: string; type: 'events' } };
+      task?: { data: { id: string; type: 'tasks' } };
+    };
+  };
+}
+
+export interface ProductiveBookingUpdate {
+  data: {
+    type: 'bookings';
+    id: string;
+    attributes?: {
+      started_on?: string;
+      ended_on?: string;
+      time?: number;
+      total_time?: number;
+      percentage?: number;
+      note?: string;
+      draft?: boolean;
+    };
+  };
+}
+
+// Report types (read-only, generic structure)
+
+export interface ProductiveReportEntry {
+  id: string;
+  type: string;
+  attributes: Record<string, unknown>;
+  relationships?: Record<string, unknown>;
 }
 
 export interface ProductiveError {

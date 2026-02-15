@@ -11,7 +11,7 @@ export async function whoAmI(
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   try {
     WhoAmIArgsSchema.parse(args);
-    
+
     if (!config?.PRODUCTIVE_USER_ID) {
       return {
         content: [{
@@ -20,36 +20,28 @@ export async function whoAmI(
         }],
       };
     }
-    
-    // Try to get the user details from the API
+
     try {
-      const response = await client.listPeople({
-        limit: 1,
-      });
-      
-      // Find the configured user in the response
-      const currentUser = response.data.find(person => person.id === config.PRODUCTIVE_USER_ID);
-      
-      if (currentUser) {
-        const fullName = `${currentUser.attributes.first_name} ${currentUser.attributes.last_name}`.trim();
-        return {
-          content: [{
-            type: 'text',
-            text: `Current user: ${fullName} (ID: ${config.PRODUCTIVE_USER_ID}, Email: ${currentUser.attributes.email})
-            
+      const response = await client.getPerson(config.PRODUCTIVE_USER_ID);
+      const person = response.data;
+      const fullName = `${person.attributes.first_name} ${person.attributes.last_name}`.trim();
+      return {
+        content: [{
+          type: 'text',
+          text: `Current user: ${fullName} (ID: ${config.PRODUCTIVE_USER_ID}, Email: ${person.attributes.email})
+
 When you use "me" in any command, it refers to this user.`,
-          }],
-        };
-      }
-    } catch (error) {
+        }],
+      };
+    } catch {
       // If we can't fetch user details, just show the ID
     }
-    
+
     return {
       content: [{
         type: 'text',
         text: `Current user ID: ${config.PRODUCTIVE_USER_ID}
-        
+
 When you use "me" in any command, it refers to this user ID.`,
       }],
     };
@@ -60,7 +52,7 @@ When you use "me" in any command, it refers to this user ID.`,
         `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`
       );
     }
-    
+
     throw new McpError(
       ErrorCode.InternalError,
       error instanceof Error ? error.message : 'Unknown error occurred'

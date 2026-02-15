@@ -386,15 +386,30 @@ export async function updateInvoiceTool(
     if (params.footer !== undefined) attributes.footer = params.footer;
     if (params.pay_on !== undefined) attributes.pay_on = params.pay_on;
     if (params.purchase_order_number !== undefined) attributes.purchase_order_number = params.purchase_order_number;
-    if (params.xero_invoice_url !== undefined) attributes.export_invoice_url = params.xero_invoice_url;
+    if (params.xero_invoice_url !== undefined) {
+      attributes.export_invoice_url = params.xero_invoice_url;
+      attributes.exported = true;
+      const match = params.xero_invoice_url.match(/InvoiceID=([0-9a-f-]+)/i);
+      if (match) attributes.export_id = match[1];
+    }
     if (params.tag_list !== undefined) attributes.tag_list = params.tag_list;
 
-    // paid_on is read-only on invoices — create a payment record instead
+    // paid_on is read-only on invoices — create a payment record instead.
+    // Do NOT send paid_on as an invoice attribute (causes ghost $0 payments).
     if (params.paid_on !== undefined) {
-      // First get the invoice to find its total amount
       const invoiceResp = await client.getInvoice(params.id);
-      const invoiceTotal = invoiceResp.data.attributes.total || invoiceResp.data.attributes.amount;
-      await client.createPayment(params.id, params.paid_on, String(invoiceTotal));
+      const unpaid = Number(invoiceResp.data.attributes.amount_unpaid);
+      if (!isNaN(unpaid) && unpaid > 0) {
+        // Use amount_unpaid to handle partial payments correctly
+        await client.createPayment(params.id, params.paid_on, String(invoiceResp.data.attributes.amount_unpaid));
+      } else if (isNaN(unpaid)) {
+        // amount_unpaid not available — fall back to full total for new payment
+        const total = invoiceResp.data.attributes.amount_with_tax || invoiceResp.data.attributes.amount;
+        if (Number(total) > 0) {
+          await client.createPayment(params.id, params.paid_on, String(total));
+        }
+      }
+      // If unpaid <= 0, invoice is already fully paid — skip
     }
 
     let inv;
@@ -560,7 +575,7 @@ export async function createLineItemTool(
     return {
       content: [{
         type: 'text',
-        text: `Line item created (ID: ${item.id})\n\nInvoice: ${params.invoice_id}\nDescription: ${params.description}\nQty: ${params.quantity} x $${params.unit_price}\nAmount: ${item.attributes.amount ?? 'N/A'}\nTax: ${item.attributes.amount_tax ?? 'N/A'}\nTotal: ${item.attributes.amount_with_tax ?? 'N/A'}`,
+        text: `Line item created (ID: ${item.id})\n\nInvoice: ${params.invoice_id}\nDescription: ${params.description}\nQty: ${params.quantity} x $${(params.unit_price / 100).toFixed(2)}\nAmount: ${item.attributes.amount ?? 'N/A'}\nTax: ${item.attributes.amount_tax ?? 'N/A'}\nTotal: ${item.attributes.amount_with_tax ?? 'N/A'}`,
       }],
     };
   } catch (error) {
@@ -628,5 +643,80 @@ export const finalizeInvoiceDefinition = {
       id: { type: 'string', description: 'Invoice ID to finalize (required)' },
     },
     required: ['id'],
+  },
+};
+
+// --- List Payments ---
+
+const listPaymentsSchema = z.object({
+  invoice_id: z.string().describe('Invoice ID to list payments for'),
+});
+
+export async function listPaymentsTool(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = listPaymentsSchema.parse(args || {});
+    const response = await client.listPayments(params.invoice_id);
+
+    if (!response.data || response.data.length === 0) {
+      return { content: [{ type: 'text', text: 'No payments found for this invoice.' }] };
+    }
+
+    const lines = response.data.map(p => {
+      const a = p.attributes;
+      return `- Payment ${p.id}: amount=${a.amount}, paid_on=${a.paid_on}`;
+    });
+
+    return {
+      content: [{ type: 'text', text: `Found ${response.data.length} payment(s):\n\n${lines.join('\n')}` }],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`);
+    }
+    throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : 'Unknown error occurred');
+  }
+}
+
+export const listPaymentsDefinition = {
+  name: 'list_payments',
+  description: 'List payment records for an invoice.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      invoice_id: { type: 'string', description: 'Invoice ID (required)' },
+    },
+    required: ['invoice_id'],
+  },
+};
+
+// --- Delete Payment ---
+
+const deletePaymentSchema = z.object({
+  payment_id: z.string().describe('Payment ID to delete'),
+});
+
+export async function deletePaymentTool(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const params = deletePaymentSchema.parse(args || {});
+  await client.deletePayment(params.payment_id);
+  return {
+    content: [{ type: 'text', text: `Payment ${params.payment_id} deleted.` }],
+  };
+}
+
+export const deletePaymentDefinition = {
+  name: 'delete_payment',
+  description: 'Delete a payment record from an invoice.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      payment_id: { type: 'string', description: 'Payment ID to delete (required)' },
+    },
+    required: ['payment_id'],
   },
 };

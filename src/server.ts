@@ -17,14 +17,20 @@ import { addTaskCommentTool, addTaskCommentDefinition, deleteTaskCommentTool, de
 import { listDocumentsTool, listDocumentsDefinition, createDocumentTool, createDocumentDefinition, updateDocumentTool, updateDocumentDefinition, deleteDocumentTool, deleteDocumentDefinition } from './tools/documents.js';
 import { updateTaskStatusTool, updateTaskStatusDefinition } from './tools/task-status.js';
 import { listWorkflowStatusesTool, listWorkflowStatusesDefinition } from './tools/workflow-statuses.js';
-import { listTimeEntresTool, createTimeEntryTool, updateTimeEntryTool, deleteTimeEntryTool, listTimeEntriesDefinition, createTimeEntryDefinition, updateTimeEntryDefinition, deleteTimeEntryDefinition } from './tools/time-entries.js';
+import { listTimeEntriesTool, createTimeEntryTool, updateTimeEntryTool, deleteTimeEntryTool, listTimeEntriesDefinition, createTimeEntryDefinition, updateTimeEntryDefinition, deleteTimeEntryDefinition } from './tools/time-entries.js';
 import { listProjectDealsTool, createDealTool, updateDealTool, getDealTool, deleteDealTool, copyDealTool, listProjectDealsDefinition, createDealDefinition, updateDealDefinition, getDealDefinition, deleteDealDefinition, copyDealDefinition } from './tools/deals.js';
-import { listServicesTool, getProjectServicesTool, listDealServicesTool, createServiceTool, listServicesDefinition, getProjectServicesDefinition, listDealServicesDefinition, createServiceDefinition } from './tools/services.js';
+import { listServicesTool, listDealServicesTool, createServiceTool, updateServiceTool, listServicesDefinition, listDealServicesDefinition, createServiceDefinition, updateServiceDefinition } from './tools/services.js';
 import { updateTaskSprint, updateTaskSprintTool } from './tools/task-sprint.js';
 import { moveTaskToList, moveTaskToListTool } from './tools/task-list-move.js';
 import { addToBacklog, addToBacklogTool } from './tools/task-backlog.js';
 import { taskRepositionTool, taskRepositionDefinition, taskRepositionSchema } from './tools/task-reposition.js';
-import { listDocumentTypesTool, listDocumentTypesDefinition, listInvoicesTool, listInvoicesDefinition, getInvoiceTool, getInvoiceDefinition, deleteInvoiceTool, deleteInvoiceDefinition, createInvoiceTool, createInvoiceDefinition, updateInvoiceTool, updateInvoiceDefinition, linkInvoiceToBudgetTool, linkInvoiceToBudgetDefinition, createLineItemTool, createLineItemDefinition, finalizeInvoiceTool, finalizeInvoiceDefinition } from './tools/invoices.js';
+import { listDocumentTypesTool, listDocumentTypesDefinition, listInvoicesTool, listInvoicesDefinition, getInvoiceTool, getInvoiceDefinition, deleteInvoiceTool, deleteInvoiceDefinition, createInvoiceTool, createInvoiceDefinition, updateInvoiceTool, updateInvoiceDefinition, linkInvoiceToBudgetTool, linkInvoiceToBudgetDefinition, createLineItemTool, createLineItemDefinition, finalizeInvoiceTool, finalizeInvoiceDefinition, listPaymentsTool, listPaymentsDefinition, deletePaymentTool, deletePaymentDefinition } from './tools/invoices.js';
+import { listExpensesTool, listExpensesDefinition, createExpenseTool, createExpenseDefinition, deleteExpenseTool, deleteExpenseDefinition } from './tools/expenses.js';
+import { listRateCardsTool, listRateCardsDefinition, getRateCardTool, getRateCardDefinition, createRateCardTool, createRateCardDefinition, updateRateCardTool, updateRateCardDefinition, deleteRateCardTool, deleteRateCardDefinition, archiveRateCardTool, archiveRateCardDefinition, restoreRateCardTool, restoreRateCardDefinition } from './tools/rate-cards.js';
+import { listPricesTool, listPricesDefinition, getPriceTool, getPriceDefinition, createPriceTool, createPriceDefinition, updatePriceTool, updatePriceDefinition, deletePriceTool, deletePriceDefinition } from './tools/prices.js';
+import { listTodosTool, listTodosDefinition, createTodoTool, createTodoDefinition, updateTodoTool, updateTodoDefinition, deleteTodoTool, deleteTodoDefinition } from './tools/todos.js';
+import { listBookingsTool, listBookingsDefinition, getBookingTool, getBookingDefinition, createBookingTool, createBookingDefinition, updateBookingTool, updateBookingDefinition, deleteBookingTool, deleteBookingDefinition } from './tools/bookings.js';
+import { getReportTool, getReportDefinition } from './tools/reports.js';
 import { generateTimesheetPrompt, timesheetPromptDefinition, generateQuickTimesheetPrompt, quickTimesheetPromptDefinition } from './prompts/timesheet.js';
 
 export async function createServer() {
@@ -94,8 +100,8 @@ export async function createServer() {
       deleteDealDefinition,
       copyDealDefinition,
       listServicesDefinition,
-      getProjectServicesDefinition,
       createServiceDefinition,
+      updateServiceDefinition,
       updateTaskSprintTool,
       moveTaskToListTool,
       addToBacklogTool,
@@ -109,11 +115,38 @@ export async function createServer() {
       linkInvoiceToBudgetDefinition,
       createLineItemDefinition,
       finalizeInvoiceDefinition,
+      listPaymentsDefinition,
+      deletePaymentDefinition,
       deleteTaskCommentDefinition,
       listDocumentsDefinition,
       createDocumentDefinition,
       updateDocumentDefinition,
       deleteDocumentDefinition,
+      listExpensesDefinition,
+      createExpenseDefinition,
+      deleteExpenseDefinition,
+      listRateCardsDefinition,
+      getRateCardDefinition,
+      createRateCardDefinition,
+      updateRateCardDefinition,
+      deleteRateCardDefinition,
+      archiveRateCardDefinition,
+      restoreRateCardDefinition,
+      listPricesDefinition,
+      getPriceDefinition,
+      createPriceDefinition,
+      updatePriceDefinition,
+      deletePriceDefinition,
+      listTodosDefinition,
+      createTodoDefinition,
+      updateTodoDefinition,
+      deleteTodoDefinition,
+      listBookingsDefinition,
+      getBookingDefinition,
+      createBookingDefinition,
+      updateBookingDefinition,
+      deleteBookingDefinition,
+      getReportDefinition,
     ],
   }));
 
@@ -218,7 +251,7 @@ export async function createServer() {
         return await getRecentUpdates(apiClient, args);
 
       case 'list_time_entries':
-        return await listTimeEntresTool(apiClient, args, config);
+        return await listTimeEntriesTool(apiClient, args, config);
 
       case 'create_time_entry':
         return await createTimeEntryTool(apiClient, args, config);
@@ -253,11 +286,11 @@ export async function createServer() {
       case 'list_services':
         return await listServicesTool(apiClient, args);
 
-      case 'get_project_services':
-        return await getProjectServicesTool(apiClient, args);
-
       case 'create_service':
         return await createServiceTool(apiClient, args);
+
+      case 'update_service':
+        return await updateServiceTool(apiClient, args);
 
       case 'update_task_sprint':
         return await updateTaskSprint(apiClient, args);
@@ -302,6 +335,12 @@ export async function createServer() {
       case 'finalize_invoice':
         return await finalizeInvoiceTool(apiClient, args);
 
+      case 'list_payments':
+        return await listPaymentsTool(apiClient, args);
+
+      case 'delete_payment':
+        return await deletePaymentTool(apiClient, args);
+
       case 'delete_task_comment':
         return await deleteTaskCommentTool(apiClient, args);
 
@@ -316,6 +355,81 @@ export async function createServer() {
 
       case 'delete_document':
         return await deleteDocumentTool(apiClient, args);
+
+      case 'list_expenses':
+        return await listExpensesTool(apiClient, args);
+
+      case 'create_expense':
+        return await createExpenseTool(apiClient, args, config);
+
+      case 'delete_expense':
+        return await deleteExpenseTool(apiClient, args);
+
+      case 'list_rate_cards':
+        return await listRateCardsTool(apiClient, args);
+
+      case 'get_rate_card':
+        return await getRateCardTool(apiClient, args);
+
+      case 'create_rate_card':
+        return await createRateCardTool(apiClient, args);
+
+      case 'update_rate_card':
+        return await updateRateCardTool(apiClient, args);
+
+      case 'delete_rate_card':
+        return await deleteRateCardTool(apiClient, args);
+
+      case 'archive_rate_card':
+        return await archiveRateCardTool(apiClient, args);
+
+      case 'restore_rate_card':
+        return await restoreRateCardTool(apiClient, args);
+
+      case 'list_prices':
+        return await listPricesTool(apiClient, args);
+
+      case 'get_price':
+        return await getPriceTool(apiClient, args);
+
+      case 'create_price':
+        return await createPriceTool(apiClient, args);
+
+      case 'update_price':
+        return await updatePriceTool(apiClient, args);
+
+      case 'delete_price':
+        return await deletePriceTool(apiClient, args);
+
+      case 'list_todos':
+        return await listTodosTool(apiClient, args, config);
+
+      case 'create_todo':
+        return await createTodoTool(apiClient, args, config);
+
+      case 'update_todo':
+        return await updateTodoTool(apiClient, args);
+
+      case 'delete_todo':
+        return await deleteTodoTool(apiClient, args);
+
+      case 'list_bookings':
+        return await listBookingsTool(apiClient, args, config);
+
+      case 'get_booking':
+        return await getBookingTool(apiClient, args);
+
+      case 'create_booking':
+        return await createBookingTool(apiClient, args, config);
+
+      case 'update_booking':
+        return await updateBookingTool(apiClient, args);
+
+      case 'delete_booking':
+        return await deleteBookingTool(apiClient, args);
+
+      case 'get_report':
+        return await getReportTool(apiClient, args);
 
       default:
         throw new Error(`Unknown tool: ${name}`);

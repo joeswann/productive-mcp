@@ -95,7 +95,8 @@ export async function updateTaskSprint(
     const updatedTask = response.data;
     
     // Get the updated sprint values for display
-    const updatedSprints = updatedTask.attributes.custom_fields?.[SPRINT_CUSTOM_FIELD_ID] || [];
+    const customFields = updatedTask.attributes.custom_fields as Record<string, string[]> | undefined;
+    const updatedSprints = customFields?.[SPRINT_CUSTOM_FIELD_ID] || [];
     const sprintNames = updatedSprints.map((id: string) => {
       const entry = Object.entries(SPRINT_MAPPING).find(([_, value]) => value === id);
       return entry ? entry[0] : id;

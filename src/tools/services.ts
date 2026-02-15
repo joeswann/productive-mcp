@@ -75,79 +75,6 @@ export const listServicesDefinition = {
   },
 };
 
-// --- Get Project Services (deprecated) ---
-
-const getProjectServicesSchema = z.object({
-  project_id: z.string().min(1, 'Project ID is required'),
-  limit: z.number().min(1).max(200).default(30).optional(),
-});
-
-export async function getProjectServicesTool(
-  client: ProductiveAPIClient,
-  args: unknown
-): Promise<{ content: Array<{ type: string; text: string }> }> {
-  try {
-    const params = getProjectServicesSchema.parse(args);
-
-    const response = await client.listServices({
-      limit: params.limit,
-    });
-
-    if (!response.data || response.data.length === 0) {
-      return {
-        content: [{
-          type: 'text',
-          text: `No active services found for project ${params.project_id}.`,
-        }],
-      };
-    }
-
-    const servicesText = response.data.map(service => {
-      const companyId = service.relationships?.company?.data?.id;
-
-      return `• ${service.attributes.name} (ID: ${service.id})
-  ${companyId ? `Company ID: ${companyId}` : ''}
-  ${service.attributes.description ? `Description: ${service.attributes.description}` : 'No description'}`;
-    }).join('\n\n');
-
-    const summary = `Services available for project ${params.project_id} (${response.data.length} service${response.data.length !== 1 ? 's' : ''}):\n\n${servicesText}`;
-
-    return {
-      content: [{
-        type: 'text',
-        text: summary,
-      }],
-    };
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`);
-    }
-    throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : 'Unknown error occurred');
-  }
-}
-
-export const getProjectServicesDefinition = {
-  name: 'get_project_services',
-  description: 'DEPRECATED: Use the proper workflow instead: list_projects → list_project_deals → list_deal_services → create_time_entry. This tool does not properly handle the project → deal/budget → service hierarchy required for timesheet entries.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      project_id: {
-        type: 'string',
-        description: 'The ID of the project',
-      },
-      limit: {
-        type: 'number',
-        description: 'Number of services to return (1-200)',
-        minimum: 1,
-        maximum: 200,
-        default: 30,
-      },
-    },
-    required: ['project_id'],
-  },
-};
-
 // --- List Deal Services ---
 
 const listDealServicesSchema = z.object({
@@ -183,18 +110,18 @@ export async function listDealServicesTool(
       const a = service.attributes;
       const billing = a.billing_type_id ? billingTypes[a.billing_type_id] || `Type ${a.billing_type_id}` : 'Unknown';
       const unit = a.unit_id ? unitTypes[a.unit_id] || `Unit ${a.unit_id}` : '';
-      const price = a.price != null ? `$${(a.price / 100).toFixed(2)}` : '';
+      const price = a.price != null ? `$${(Number(a.price) / 100).toFixed(2)}` : '';
       const billable = a.billable === true ? 'Billable' : a.billable === false ? 'Internal' : '';
       const workedTime = a.worked_time ? `Worked: ${(a.worked_time / 60).toFixed(1)}h` : '';
       const budgetedTime = a.budgeted_time ? `Budgeted: ${(a.budgeted_time / 60).toFixed(1)}h` : '';
-      const revenue = a.revenue ? `Revenue: $${(a.revenue / 100).toFixed(2)}` : '';
+      const revenue = a.revenue ? `Revenue: $${(Number(a.revenue) / 100).toFixed(2)}` : '';
 
       return `• ${a.name || 'Unnamed Service'} (ID: ${service.id}) [${billable}]
   Billing: ${billing}${unit ? ` | Unit: ${unit}` : ''}${price ? ` | Rate: ${price}` : ''}
   ${[workedTime, budgetedTime, revenue].filter(Boolean).join(' | ') || 'No time tracked'}${a.description ? `\n  Description: ${a.description}` : ''}`;
     }).join('\n\n');
 
-    const summary = `Found ${response.data.length} service${response.data.length !== 1 ? 's' : ''} for deal/budget ${params.deal_id}:\n\n${servicesText}`;
+    const summary = `Found ${response.data.length} service${response.data.length !== 1 ? 's' : ''} for deal/budget ${params.deal_id}${response.meta?.total_count ? ` (showing ${response.data.length} of ${response.meta.total_count})` : ''}:\n\n${servicesText}`;
 
     return {
       content: [{
@@ -239,7 +166,7 @@ const createServiceSchema = z.object({
   deal_id: z.string().min(1, 'Deal/budget ID is required'),
   billing_type_id: z.number().int().min(1).max(3).describe('1=Fixed, 2=Time and Materials, 3=Not Billable'),
   unit_id: z.number().int().min(1).max(3).default(1).optional().describe('1=Hour, 2=Piece, 3=Day'),
-  price: z.number().optional().describe('Price per unit (e.g. hourly rate)'),
+  price: z.number().optional().describe('Price per unit in cents (e.g. 14000 = $140.00/hr)'),
   quantity: z.number().optional().describe('Estimated quantity'),
   description: z.string().optional(),
 });
@@ -276,7 +203,7 @@ export async function createServiceTool(
     return {
       content: [{
         type: 'text',
-        text: `Service created successfully!\nName: ${s.attributes.name} (ID: ${s.id})\nDeal ID: ${params.deal_id}\nBilling: ${params.billing_type_id === 1 ? 'Fixed' : params.billing_type_id === 2 ? 'Time & Materials' : 'Not Billable'}${params.price !== undefined ? `\nPrice: $${params.price}` : ''}`,
+        text: `Service created successfully!\nName: ${s.attributes.name} (ID: ${s.id})\nDeal ID: ${params.deal_id}\nBilling: ${params.billing_type_id === 1 ? 'Fixed' : params.billing_type_id === 2 ? 'Time & Materials' : 'Not Billable'}${params.price !== undefined ? `\nPrice: $${(params.price / 100).toFixed(2)}` : ''}`,
       }],
     };
   } catch (error) {
@@ -286,6 +213,76 @@ export async function createServiceTool(
     throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : 'Unknown error occurred');
   }
 }
+
+// --- Update Service ---
+
+const updateServiceSchema = z.object({
+  id: z.string().min(1, 'Service ID is required'),
+  expense_tracking_enabled: z.boolean().optional(),
+  time_tracking_enabled: z.boolean().optional(),
+  booking_tracking_enabled: z.boolean().optional(),
+  name: z.string().optional(),
+  price: z.number().optional(),
+  description: z.string().optional(),
+  quantity: z.number().optional(),
+});
+
+export async function updateServiceTool(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = updateServiceSchema.parse(args);
+    const { id, ...attrs } = params;
+
+    const attributes: Record<string, unknown> = {};
+    if (attrs.expense_tracking_enabled !== undefined) attributes.expense_tracking_enabled = attrs.expense_tracking_enabled;
+    if (attrs.time_tracking_enabled !== undefined) attributes.time_tracking_enabled = attrs.time_tracking_enabled;
+    if (attrs.booking_tracking_enabled !== undefined) attributes.booking_tracking_enabled = attrs.booking_tracking_enabled;
+    if (attrs.name !== undefined) attributes.name = attrs.name;
+    if (attrs.price !== undefined) attributes.price = attrs.price;
+    if (attrs.description !== undefined) attributes.description = attrs.description;
+    if (attrs.quantity !== undefined) attributes.quantity = attrs.quantity;
+
+    if (Object.keys(attributes).length === 0) {
+      throw new McpError(ErrorCode.InvalidParams, 'At least one field to update is required');
+    }
+
+    const response = await client.updateService(id, attributes);
+    const s = response.data;
+
+    return {
+      content: [{
+        type: 'text',
+        text: `Service ${id} updated successfully!\nName: ${s.attributes.name}\nExpense tracking: ${s.attributes.expense_tracking_enabled ?? 'unchanged'}\nTime tracking: ${s.attributes.time_tracking_enabled ?? 'unchanged'}`,
+      }],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`);
+    }
+    throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : 'Unknown error occurred');
+  }
+}
+
+export const updateServiceDefinition = {
+  name: 'update_service',
+  description: 'Update a service in Productive.io. Use this to enable/disable expense tracking, time tracking, or change service attributes.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'Service ID to update (required)' },
+      expense_tracking_enabled: { type: 'boolean', description: 'Enable/disable expense tracking on this service' },
+      time_tracking_enabled: { type: 'boolean', description: 'Enable/disable time tracking on this service' },
+      booking_tracking_enabled: { type: 'boolean', description: 'Enable/disable booking tracking on this service' },
+      name: { type: 'string', description: 'New service name' },
+      price: { type: 'number', description: 'New price per unit in cents (e.g. 14000 = $140.00/hr)' },
+      description: { type: 'string', description: 'New description' },
+      quantity: { type: 'number', description: 'Budgeted quantity (hours for hourly services)' },
+    },
+    required: ['id'],
+  },
+};
 
 export const createServiceDefinition = {
   name: 'create_service',
@@ -297,7 +294,7 @@ export const createServiceDefinition = {
       deal_id: { type: 'string', description: 'Deal/budget ID to create the service in' },
       billing_type_id: { type: 'number', description: '1=Fixed, 2=Time and Materials, 3=Not Billable', minimum: 1, maximum: 3 },
       unit_id: { type: 'number', description: '1=Hour (default), 2=Piece, 3=Day', minimum: 1, maximum: 3 },
-      price: { type: 'number', description: 'Price per unit (e.g. hourly rate)' },
+      price: { type: 'number', description: 'Price per unit in cents (e.g. 14000 = $140.00/hr, 11000 = $110.00/hr)' },
       quantity: { type: 'number', description: 'Estimated quantity' },
       description: { type: 'string', description: 'Service description' },
     },

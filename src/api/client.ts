@@ -1,8 +1,8 @@
 import { Config } from '../config/index.js';
-import { 
-  ProductiveCompany, 
-  ProductiveProject, 
-  ProductiveTask, 
+import {
+  ProductiveCompany,
+  ProductiveProject,
+  ProductiveTask,
   ProductiveBoard,
   ProductiveTaskList,
   ProductivePerson,
@@ -12,7 +12,7 @@ import {
   ProductiveService,
   ProductiveTimeEntry,
   ProductiveDeal,
-  ProductiveResponse, 
+  ProductiveResponse,
   ProductiveSingleResponse,
   ProductiveTaskCreate,
   ProductiveTaskUpdate,
@@ -41,6 +41,20 @@ import {
   ProductivePage,
   ProductivePageCreate,
   ProductivePageUpdate,
+  ProductiveExpense,
+  ProductiveExpenseCreate,
+  ProductiveRateCard,
+  ProductiveRateCardCreate,
+  ProductivePrice,
+  ProductivePriceCreate,
+  ProductivePriceUpdate,
+  ProductiveTodo,
+  ProductiveTodoCreate,
+  ProductiveTodoUpdate,
+  ProductiveBooking,
+  ProductiveBookingCreate,
+  ProductiveBookingUpdate,
+  ProductiveReportEntry,
 } from './types.js';
 
 export class ProductiveAPIClient {
@@ -71,11 +85,11 @@ export class ProductiveAPIClient {
       });
       
       if (!response.ok) {
-        const errorData = await response.json() as ProductiveError;
-        // Debug: Log full error response
-        console.error('API Error Response:', JSON.stringify(errorData, null, 2));
-        console.error('Request was to:', url);
-        const errorMessage = errorData.errors?.[0]?.detail || `API request failed with status ${response.status}`;
+        let errorMessage = `API request failed with status ${response.status}`;
+        try {
+          const errorData = await response.json() as ProductiveError;
+          errorMessage = errorData.errors?.[0]?.detail || errorMessage;
+        } catch { /* non-JSON error body */ }
         throw new Error(errorMessage);
       }
       
@@ -216,6 +230,12 @@ export class ProductiveAPIClient {
     });
   }
 
+  async openDeal(id: string): Promise<ProductiveSingleResponse<ProductiveDeal>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveDeal>>(`deals/${id}/open`, {
+      method: 'PATCH',
+    });
+  }
+
   async updateBoard(id: string, data: ProductiveBoardUpdate): Promise<ProductiveSingleResponse<ProductiveBoard>> {
     return this.makeRequest<ProductiveSingleResponse<ProductiveBoard>>(`boards/${id}`, {
       method: 'PATCH',
@@ -239,16 +259,19 @@ export class ProductiveAPIClient {
 
   // ── Get single resource methods ──
 
-  async getProject(id: string): Promise<ProductiveSingleResponse<ProductiveProject>> {
-    return this.makeRequest<ProductiveSingleResponse<ProductiveProject>>(`projects/${id}`);
+  async getProject(id: string, params?: { include?: string }): Promise<ProductiveSingleResponse<ProductiveProject>> {
+    const query = params?.include ? `?include=${params.include}` : '';
+    return this.makeRequest<ProductiveSingleResponse<ProductiveProject>>(`projects/${id}${query}`);
   }
 
-  async getBoard(id: string): Promise<ProductiveSingleResponse<ProductiveBoard>> {
-    return this.makeRequest<ProductiveSingleResponse<ProductiveBoard>>(`boards/${id}`);
+  async getBoard(id: string, params?: { include?: string }): Promise<ProductiveSingleResponse<ProductiveBoard>> {
+    const query = params?.include ? `?include=${params.include}` : '';
+    return this.makeRequest<ProductiveSingleResponse<ProductiveBoard>>(`boards/${id}${query}`);
   }
 
-  async getTaskList(id: string): Promise<ProductiveSingleResponse<ProductiveTaskList>> {
-    return this.makeRequest<ProductiveSingleResponse<ProductiveTaskList>>(`task_lists/${id}`);
+  async getTaskList(id: string, params?: { include?: string }): Promise<ProductiveSingleResponse<ProductiveTaskList>> {
+    const query = params?.include ? `?include=${params.include}` : '';
+    return this.makeRequest<ProductiveSingleResponse<ProductiveTaskList>>(`task_lists/${id}${query}`);
   }
 
   async getDeal(id: string): Promise<ProductiveSingleResponse<ProductiveDeal>> {
@@ -257,16 +280,19 @@ export class ProductiveAPIClient {
     );
   }
 
-  async getCompany(id: string): Promise<ProductiveSingleResponse<ProductiveCompany>> {
-    return this.makeRequest<ProductiveSingleResponse<ProductiveCompany>>(`companies/${id}`);
+  async getCompany(id: string, params?: { include?: string }): Promise<ProductiveSingleResponse<ProductiveCompany>> {
+    const query = params?.include ? `?include=${params.include}` : '';
+    return this.makeRequest<ProductiveSingleResponse<ProductiveCompany>>(`companies/${id}${query}`);
   }
 
-  async getService(id: string): Promise<ProductiveSingleResponse<ProductiveService>> {
-    return this.makeRequest<ProductiveSingleResponse<ProductiveService>>(`services/${id}`);
+  async getService(id: string, params?: { include?: string }): Promise<ProductiveSingleResponse<ProductiveService>> {
+    const query = params?.include ? `?include=${params.include}` : '';
+    return this.makeRequest<ProductiveSingleResponse<ProductiveService>>(`services/${id}${query}`);
   }
 
-  async getPerson(id: string): Promise<ProductiveSingleResponse<ProductivePerson>> {
-    return this.makeRequest<ProductiveSingleResponse<ProductivePerson>>(`people/${id}`);
+  async getPerson(id: string, params?: { include?: string }): Promise<ProductiveSingleResponse<ProductivePerson>> {
+    const query = params?.include ? `?include=${params.include}` : '';
+    return this.makeRequest<ProductiveSingleResponse<ProductivePerson>>(`people/${id}${query}`);
   }
 
   // ── Delete methods ──
@@ -331,36 +357,61 @@ export class ProductiveAPIClient {
     project_id?: string;
     assignee_id?: string;
     status?: 'open' | 'closed';
+    closed_after?: string;
+    closed_before?: string;
+    last_activity_after?: string;
+    last_activity_before?: string;
+    sort?: string;
     limit?: number;
     page?: number;
   }): Promise<ProductiveResponse<ProductiveTask>> {
     const queryParams = new URLSearchParams();
-    
+
     if (params?.project_id) {
       queryParams.append('filter[project_id]', params.project_id);
     }
-    
+
     if (params?.assignee_id) {
       queryParams.append('filter[assignee_id]', params.assignee_id);
     }
-    
+
     if (params?.status) {
       // Convert status names to integers: open = 1, closed = 2
       const statusValue = params.status === 'open' ? '1' : '2';
       queryParams.append('filter[status]', statusValue);
     }
-    
+
+    if (params?.closed_after) {
+      queryParams.append('filter[closed_after]', params.closed_after);
+    }
+
+    if (params?.closed_before) {
+      queryParams.append('filter[closed_before]', params.closed_before);
+    }
+
+    if (params?.last_activity_after) {
+      queryParams.append('filter[last_activity_after]', params.last_activity_after);
+    }
+
+    if (params?.last_activity_before) {
+      queryParams.append('filter[last_activity_before]', params.last_activity_before);
+    }
+
+    if (params?.sort) {
+      queryParams.append('sort', params.sort);
+    }
+
     if (params?.limit) {
       queryParams.append('page[size]', params.limit.toString());
     }
-    
+
     if (params?.page) {
       queryParams.append('page[number]', params.page.toString());
     }
-    
+
     // Include relationships needed for display
     // Note: Productive API uses 'assignee' (singular), not 'assignees'
-    queryParams.append('include', 'assignee,workflow_status');
+    queryParams.append('include', 'assignee,workflow_status,project');
 
     const queryString = queryParams.toString();
     const path = `tasks${queryString ? `?${queryString}` : ''}`;
@@ -479,8 +530,9 @@ export class ProductiveAPIClient {
     return this.makeRequest<ProductiveResponse<ProductivePerson>>(path);
   }
   
-  async getTask(taskId: string): Promise<ProductiveSingleResponse<ProductiveTask>> {
-    return this.makeRequest<ProductiveSingleResponse<ProductiveTask>>(`tasks/${taskId}`);
+  async getTask(taskId: string, params?: { include?: string }): Promise<ProductiveSingleResponse<ProductiveTask>> {
+    const query = params?.include ? `?include=${params.include}` : '';
+    return this.makeRequest<ProductiveSingleResponse<ProductiveTask>>(`tasks/${taskId}${query}`);
   }
 
   async updateTask(taskId: string, taskData: ProductiveTaskUpdate): Promise<ProductiveSingleResponse<ProductiveTask>> {
@@ -494,6 +546,8 @@ export class ProductiveAPIClient {
     task_id?: string;
     project_id?: string;
     person_id?: string;
+    creator_id?: string;
+    company_id?: string;
     item_type?: string;
     event?: string;
     after?: string; // ISO 8601 date string
@@ -502,46 +556,57 @@ export class ProductiveAPIClient {
     page?: number;
   }): Promise<ProductiveResponse<ProductiveActivity>> {
     const queryParams = new URLSearchParams();
-    
+
+    // Include creator relationship for display
+    queryParams.append('include', 'creator');
+
     if (params?.task_id) {
       queryParams.append('filter[task_id]', params.task_id);
     }
-    
+
     if (params?.project_id) {
       queryParams.append('filter[project_id]', params.project_id);
     }
-    
+
     if (params?.person_id) {
       queryParams.append('filter[person_id]', params.person_id);
     }
-    
+
+    if (params?.creator_id) {
+      queryParams.append('filter[creator_id]', params.creator_id);
+    }
+
+    if (params?.company_id) {
+      queryParams.append('filter[company_id]', params.company_id);
+    }
+
     if (params?.item_type) {
       queryParams.append('filter[item_type]', params.item_type);
     }
-    
+
     if (params?.event) {
       queryParams.append('filter[event]', params.event);
     }
-    
+
     if (params?.after) {
       queryParams.append('filter[after]', params.after);
     }
-    
+
     if (params?.before) {
       queryParams.append('filter[before]', params.before);
     }
-    
+
     if (params?.limit) {
       queryParams.append('page[size]', params.limit.toString());
     }
-    
+
     if (params?.page) {
       queryParams.append('page[number]', params.page.toString());
     }
-    
+
     const queryString = queryParams.toString();
     const path = `activities${queryString ? `?${queryString}` : ''}`;
-    
+
     return this.makeRequest<ProductiveResponse<ProductiveActivity>>(path);
   }
 
@@ -617,53 +682,62 @@ export class ProductiveAPIClient {
     project_id?: string;
     task_id?: string;
     service_id?: string;
+    company_id?: string;
+    sort?: string;
     limit?: number;
     page?: number;
   }): Promise<ProductiveResponse<ProductiveTimeEntry>> {
     const queryParams = new URLSearchParams();
-    
+
     // Include relationships by default
     queryParams.append('include', 'person,service,task');
-    
+
+    // Default sort by date descending (most recent first)
+    queryParams.append('sort', params?.sort || '-date');
+
     if (params?.date) {
       queryParams.append('filter[date]', params.date);
     }
-    
+
     if (params?.after) {
       queryParams.append('filter[after]', params.after);
     }
-    
+
     if (params?.before) {
       queryParams.append('filter[before]', params.before);
     }
-    
+
     if (params?.person_id) {
       queryParams.append('filter[person_id]', params.person_id);
     }
-    
+
     if (params?.project_id) {
       queryParams.append('filter[project_id]', params.project_id);
     }
-    
+
     if (params?.task_id) {
       queryParams.append('filter[task_id]', params.task_id);
     }
-    
+
     if (params?.service_id) {
       queryParams.append('filter[service_id]', params.service_id);
     }
-    
+
+    if (params?.company_id) {
+      queryParams.append('filter[company_id]', params.company_id);
+    }
+
     if (params?.limit) {
       queryParams.append('page[size]', params.limit.toString());
     }
-    
+
     if (params?.page) {
       queryParams.append('page[number]', params.page.toString());
     }
-    
+
     const queryString = queryParams.toString();
     const path = `time_entries${queryString ? `?${queryString}` : ''}`;
-    
+
     return this.makeRequest<ProductiveResponse<ProductiveTimeEntry>>(path);
   }
 
@@ -692,8 +766,6 @@ export class ProductiveAPIClient {
    * });
    */
   async createTimeEntry(timeEntryData: ProductiveTimeEntryCreate): Promise<ProductiveSingleResponse<ProductiveTimeEntry>> {
-    // Debug: Log the request body
-    console.error('Creating time entry with data:', JSON.stringify(timeEntryData, null, 2));
     return this.makeRequest<ProductiveSingleResponse<ProductiveTimeEntry>>('time_entries', {
       method: 'POST',
       body: JSON.stringify(timeEntryData),
@@ -828,6 +900,19 @@ export class ProductiveAPIClient {
     return this.makeRequest<ProductiveResponse<ProductiveService>>(path);
   }
 
+  async updateService(id: string, attributes: Record<string, unknown>): Promise<ProductiveSingleResponse<ProductiveService>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveService>>(`services/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        data: {
+          type: 'services',
+          id,
+          attributes,
+        },
+      }),
+    });
+  }
+
   /**
    * Get a specific time entry by ID
    * 
@@ -920,13 +1005,13 @@ export class ProductiveAPIClient {
    * await client.repositionTask('3', { move_after_id: '1', move_before_id: '2' });
    */
   async repositionTask(
-    taskId: string, 
-    attributes: { 
-      move_before_id?: string; 
+    taskId: string,
+    attributes: {
+      move_before_id?: string;
       move_after_id?: string;
       placement?: number;
     }
-  ): Promise<any> {
+  ): Promise<ProductiveSingleResponse<ProductiveTask> | undefined> {
     const requestBody = {
       data: {
         type: 'tasks',
@@ -934,51 +1019,13 @@ export class ProductiveAPIClient {
       }
     };
 
-    // The reposition endpoint returns 204 No Content on success
-    const url = `${this.config.PRODUCTIVE_API_BASE_URL}tasks/${taskId}/reposition`;
-    
-    try {
-      const response = await fetch(url, {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveTask> | undefined>(
+      `tasks/${taskId}/reposition`,
+      {
         method: 'PATCH',
-        headers: {
-          'X-Auth-Token': this.config.PRODUCTIVE_API_TOKEN,
-          'X-Organization-Id': this.config.PRODUCTIVE_ORG_ID,
-          'Content-Type': 'application/vnd.api+json',
-        },
         body: JSON.stringify(requestBody),
-      });
-      
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error(`Task ${taskId} not found or cannot be repositioned.`);
-        }
-        throw new Error(`Reposition failed with status ${response.status}: ${response.statusText}`);
       }
-      
-      // If 204 No Content (success), return a minimal success response
-      if (response.status === 204) {
-        return {
-          success: true,
-          taskId: taskId,
-          message: `Task ${taskId} repositioned successfully`
-        };
-      }
-      
-      // For any other success response with content, try to parse JSON
-      try {
-        return await response.json();
-      } catch (e) {
-        // If parsing fails but status was success, return a minimal success object
-        return {
-          success: true,
-          taskId: taskId,
-          message: `Task ${taskId} repositioned successfully`
-        };
-      }
-    } catch (error) {
-      console.error('Error repositioning task:', error);
-      throw error;
-    }
+    );
   }
 
   // ── Tax rates ──
@@ -1087,6 +1134,16 @@ export class ProductiveAPIClient {
     });
   }
 
+  async listPayments(invoiceId: string): Promise<{ data: Array<{ id: string; attributes: Record<string, unknown>; relationships?: Record<string, unknown> }> }> {
+    return this.makeRequest(`payments?filter[invoice_id]=${invoiceId}`);
+  }
+
+  async deletePayment(paymentId: string): Promise<unknown> {
+    return this.makeRequest(`payments/${paymentId}`, {
+      method: 'DELETE',
+    });
+  }
+
   async listInvoiceAttributions(params?: {
     invoice_id?: string;
     budget_id?: string;
@@ -1179,5 +1236,268 @@ export class ProductiveAPIClient {
       method: 'PATCH',
       body: JSON.stringify({}),
     });
+  }
+
+  // ── Expense methods ──
+
+  async listExpenses(params?: {
+    service_id?: string;
+    person_id?: string;
+    deal_id?: string;
+    date_after?: string;
+    date_before?: string;
+    approval_status?: string;
+    sort?: string;
+    limit?: number;
+    page?: number;
+  }): Promise<ProductiveResponse<ProductiveExpense>> {
+    const queryParams = new URLSearchParams();
+    queryParams.append('include', 'service,person,deal');
+    queryParams.append('sort', params?.sort || '-date');
+    if (params?.service_id) queryParams.append('filter[service_id]', params.service_id);
+    if (params?.person_id) queryParams.append('filter[person_id]', params.person_id);
+    if (params?.deal_id) queryParams.append('filter[deal_id]', params.deal_id);
+    if (params?.date_after) queryParams.append('filter[date_after]', params.date_after);
+    if (params?.date_before) queryParams.append('filter[date_before]', params.date_before);
+    if (params?.approval_status) queryParams.append('filter[approval_status]', params.approval_status);
+    if (params?.limit) queryParams.append('page[size]', params.limit.toString());
+    if (params?.page) queryParams.append('page[number]', params.page.toString());
+    const queryString = queryParams.toString();
+    return this.makeRequest<ProductiveResponse<ProductiveExpense>>(`expenses?${queryString}`);
+  }
+
+  async createExpense(data: ProductiveExpenseCreate): Promise<ProductiveSingleResponse<ProductiveExpense>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveExpense>>('expenses', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteExpense(id: string): Promise<void> {
+    await this.makeRequest<void>(`expenses/${id}`, { method: 'DELETE' });
+  }
+
+  // ── Rate Card methods ──
+
+  async listRateCards(params?: {
+    company_id?: string;
+    limit?: number;
+    page?: number;
+  }): Promise<ProductiveResponse<ProductiveRateCard>> {
+    const queryParams = new URLSearchParams();
+    queryParams.append('include', 'company');
+    if (params?.company_id) queryParams.append('filter[company_id]', params.company_id);
+    if (params?.limit) queryParams.append('page[size]', params.limit.toString());
+    if (params?.page) queryParams.append('page[number]', params.page.toString());
+    const queryString = queryParams.toString();
+    return this.makeRequest<ProductiveResponse<ProductiveRateCard>>(`rate_cards?${queryString}`);
+  }
+
+  async getRateCard(id: string, params?: { include?: string }): Promise<ProductiveSingleResponse<ProductiveRateCard>> {
+    const query = params?.include ? `?include=${params.include}` : '?include=company';
+    return this.makeRequest<ProductiveSingleResponse<ProductiveRateCard>>(`rate_cards/${id}${query}`);
+  }
+
+  async createRateCard(data: ProductiveRateCardCreate): Promise<ProductiveSingleResponse<ProductiveRateCard>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveRateCard>>('rate_cards', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateRateCard(id: string, data: { data: { type: 'rate_cards'; id: string; attributes?: { name?: string } } }): Promise<ProductiveSingleResponse<ProductiveRateCard>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveRateCard>>(`rate_cards/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteRateCard(id: string): Promise<void> {
+    await this.makeRequest<void>(`rate_cards/${id}`, { method: 'DELETE' });
+  }
+
+  async archiveRateCard(id: string): Promise<ProductiveSingleResponse<ProductiveRateCard>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveRateCard>>(`rate_cards/${id}/archive`, {
+      method: 'PATCH',
+      body: JSON.stringify({}),
+    });
+  }
+
+  async restoreRateCard(id: string): Promise<ProductiveSingleResponse<ProductiveRateCard>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveRateCard>>(`rate_cards/${id}/restore`, {
+      method: 'PATCH',
+    });
+  }
+
+  // ── Price methods ──
+
+  async listPrices(params?: {
+    rate_card_id?: string;
+    company_id?: string;
+    service_type_id?: string;
+    time_tracking_enabled?: boolean;
+    booking_tracking_enabled?: boolean;
+    expense_tracking_enabled?: boolean;
+    limit?: number;
+    page?: number;
+  }): Promise<ProductiveResponse<ProductivePrice>> {
+    const queryParams = new URLSearchParams();
+    queryParams.append('include', 'rate_card,company,service_type');
+    if (params?.rate_card_id) queryParams.append('filter[rate_card_id]', params.rate_card_id);
+    if (params?.company_id) queryParams.append('filter[company_id]', params.company_id);
+    if (params?.service_type_id) queryParams.append('filter[service_type_id]', params.service_type_id);
+    if (params?.time_tracking_enabled !== undefined) queryParams.append('filter[time_tracking_enabled]', params.time_tracking_enabled.toString());
+    if (params?.booking_tracking_enabled !== undefined) queryParams.append('filter[booking_tracking_enabled]', params.booking_tracking_enabled.toString());
+    if (params?.expense_tracking_enabled !== undefined) queryParams.append('filter[expense_tracking_enabled]', params.expense_tracking_enabled.toString());
+    if (params?.limit) queryParams.append('page[size]', params.limit.toString());
+    if (params?.page) queryParams.append('page[number]', params.page.toString());
+    const queryString = queryParams.toString();
+    return this.makeRequest<ProductiveResponse<ProductivePrice>>(`prices?${queryString}`);
+  }
+
+  async getPrice(id: string): Promise<ProductiveSingleResponse<ProductivePrice>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductivePrice>>(`prices/${id}?include=rate_card,company,service_type`);
+  }
+
+  async createPrice(data: ProductivePriceCreate): Promise<ProductiveSingleResponse<ProductivePrice>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductivePrice>>('prices', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updatePrice(id: string, data: ProductivePriceUpdate): Promise<ProductiveSingleResponse<ProductivePrice>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductivePrice>>(`prices/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deletePrice(id: string): Promise<void> {
+    await this.makeRequest<void>(`prices/${id}`, { method: 'DELETE' });
+  }
+
+  // ── Todo methods ──
+
+  async listTodos(params?: {
+    task_id?: string;
+    deal_id?: string;
+    assignee_id?: string;
+    status?: number; // 1=open, 2=closed
+    due_date?: string;
+    limit?: number;
+    page?: number;
+  }): Promise<ProductiveResponse<ProductiveTodo>> {
+    const queryParams = new URLSearchParams();
+    queryParams.append('include', 'assignee,task,deal');
+    if (params?.task_id) queryParams.append('filter[task_id]', params.task_id);
+    if (params?.deal_id) queryParams.append('filter[deal_id]', params.deal_id);
+    if (params?.assignee_id) queryParams.append('filter[assignee_id]', params.assignee_id);
+    if (params?.status) queryParams.append('filter[status]', params.status.toString());
+    if (params?.due_date) queryParams.append('filter[due_date]', params.due_date);
+    if (params?.limit) queryParams.append('page[size]', params.limit.toString());
+    if (params?.page) queryParams.append('page[number]', params.page.toString());
+    const queryString = queryParams.toString();
+    return this.makeRequest<ProductiveResponse<ProductiveTodo>>(`todos?${queryString}`);
+  }
+
+  async createTodo(data: ProductiveTodoCreate): Promise<ProductiveSingleResponse<ProductiveTodo>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveTodo>>('todos', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateTodo(id: string, data: ProductiveTodoUpdate): Promise<ProductiveSingleResponse<ProductiveTodo>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveTodo>>(`todos/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteTodo(id: string): Promise<void> {
+    await this.makeRequest<void>(`todos/${id}`, { method: 'DELETE' });
+  }
+
+  // ── Booking methods ──
+
+  async listBookings(params?: {
+    person_id?: string;
+    project_id?: string;
+    service_id?: string;
+    event_id?: string;
+    task_id?: string;
+    started_on?: string;
+    ended_on?: string;
+    after?: string;
+    before?: string;
+    draft?: boolean;
+    booking_type?: string; // 'event' or 'service'
+    sort?: string;
+    limit?: number;
+    page?: number;
+  }): Promise<ProductiveResponse<ProductiveBooking>> {
+    const queryParams = new URLSearchParams();
+    queryParams.append('include', 'person,service,event,task');
+    queryParams.append('sort', params?.sort || '-started_on');
+    if (params?.person_id) queryParams.append('filter[person_id]', params.person_id);
+    if (params?.project_id) queryParams.append('filter[project_id]', params.project_id);
+    if (params?.service_id) queryParams.append('filter[service_id]', params.service_id);
+    if (params?.event_id) queryParams.append('filter[event_id]', params.event_id);
+    if (params?.task_id) queryParams.append('filter[task_id]', params.task_id);
+    if (params?.started_on) queryParams.append('filter[started_on]', params.started_on);
+    if (params?.ended_on) queryParams.append('filter[ended_on]', params.ended_on);
+    if (params?.after) queryParams.append('filter[after]', params.after);
+    if (params?.before) queryParams.append('filter[before]', params.before);
+    if (params?.draft !== undefined) queryParams.append('filter[draft]', params.draft.toString());
+    if (params?.booking_type) queryParams.append('filter[booking_type]', params.booking_type);
+    if (params?.limit) queryParams.append('page[size]', params.limit.toString());
+    if (params?.page) queryParams.append('page[number]', params.page.toString());
+    const queryString = queryParams.toString();
+    return this.makeRequest<ProductiveResponse<ProductiveBooking>>(`bookings?${queryString}`);
+  }
+
+  async getBooking(id: string, params?: { include?: string }): Promise<ProductiveSingleResponse<ProductiveBooking>> {
+    const query = params?.include ? `?include=${params.include}` : '?include=person,service,event,task';
+    return this.makeRequest<ProductiveSingleResponse<ProductiveBooking>>(`bookings/${id}${query}`);
+  }
+
+  async createBooking(data: ProductiveBookingCreate): Promise<ProductiveSingleResponse<ProductiveBooking>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveBooking>>('bookings', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateBooking(id: string, data: ProductiveBookingUpdate): Promise<ProductiveSingleResponse<ProductiveBooking>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveBooking>>(`bookings/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteBooking(id: string): Promise<void> {
+    await this.makeRequest<void>(`bookings/${id}`, { method: 'DELETE' });
+  }
+
+  // ── Report methods ──
+
+  async getReport(reportType: string, params?: {
+    group: string;
+    filters?: Record<string, string>;
+    limit?: number;
+    page?: number;
+  }): Promise<ProductiveResponse<ProductiveReportEntry>> {
+    const queryParams = new URLSearchParams();
+    if (params?.group) queryParams.append('group', params.group);
+    if (params?.filters) {
+      for (const [key, value] of Object.entries(params.filters)) {
+        queryParams.append(`filter[${key}]`, value);
+      }
+    }
+    if (params?.limit) queryParams.append('page[size]', params.limit.toString());
+    if (params?.page) queryParams.append('page[number]', params.page.toString());
+    const queryString = queryParams.toString();
+    return this.makeRequest<ProductiveResponse<ProductiveReportEntry>>(`reports/${reportType}?${queryString}`);
   }
 }

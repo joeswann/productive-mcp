@@ -29,10 +29,11 @@ export async function listProjectsTool(
     let allData: Array<{ id: string; attributes: Record<string, unknown>; relationships?: Record<string, unknown> }> = [];
 
     if (params.status === 'all' || !params.status) {
-      // Fetch both active and archived
+      // Fetch both active and archived, splitting the limit between them
+      const halfLimit = Math.ceil((params.limit || 30) / 2);
       const [activeResp, archivedResp] = await Promise.all([
-        client.listProjects({ status: 'active', company_id: params.company_id, template: params.template, limit: params.limit }),
-        client.listProjects({ status: 'archived', company_id: params.company_id, template: params.template, limit: params.limit }),
+        client.listProjects({ status: 'active', company_id: params.company_id, template: params.template, limit: halfLimit }),
+        client.listProjects({ status: 'archived', company_id: params.company_id, template: params.template, limit: halfLimit }),
       ]);
       allData = [...(activeResp?.data || []), ...(archivedResp?.data || [])];
     } else {
@@ -405,7 +406,7 @@ export async function deleteProjectTool(
 
 export const deleteProjectDefinition = {
   name: 'delete_project',
-  description: 'Delete (archive) a project in Productive.io.',
+  description: 'Permanently delete a project. WARNING: This is irreversible. To archive instead, use update_project with archived_at.',
   inputSchema: {
     type: 'object',
     properties: {

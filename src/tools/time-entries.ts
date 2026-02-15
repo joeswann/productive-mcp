@@ -69,10 +69,12 @@ const listTimeEntriesSchema = z.object({
   project_id: z.string().optional(),
   task_id: z.string().optional(),
   service_id: z.string().optional(),
+  company_id: z.string().optional(),
+  sort: z.string().optional(),
   limit: z.number().min(1).max(200).default(30).optional(),
 });
 
-export async function listTimeEntresTool(
+export async function listTimeEntriesTool(
   client: ProductiveAPIClient,
   args: unknown,
   config?: { PRODUCTIVE_USER_ID?: string }
@@ -100,6 +102,8 @@ export async function listTimeEntresTool(
       project_id: params.project_id,
       task_id: params.task_id,
       service_id: params.service_id,
+      company_id: params.company_id,
+      sort: params.sort,
       limit: params.limit,
     });
 
@@ -112,11 +116,27 @@ export async function listTimeEntresTool(
       };
     }
 
+    // Build lookup map from included resources for name resolution
+    const includedMap = new Map<string, Record<string, unknown>>();
+    if (response.included) {
+      for (const item of response.included) {
+        includedMap.set(`${item.type}:${item.id}`, item.attributes);
+      }
+    }
+
     const entriesText = response.data.map(entry => {
       const personId = entry.relationships?.person?.data?.id;
       const serviceId = entry.relationships?.service?.data?.id;
       const taskId = entry.relationships?.task?.data?.id;
       const projectId = entry.relationships?.project?.data?.id;
+
+      // Resolve names from included data
+      const personAttrs = personId ? includedMap.get(`people:${personId}`) : undefined;
+      const personName = personAttrs ? `${personAttrs.first_name} ${personAttrs.last_name}`.trim() : undefined;
+      const serviceAttrs = serviceId ? includedMap.get(`services:${serviceId}`) : undefined;
+      const serviceName = serviceAttrs?.name as string | undefined;
+      const taskAttrs = taskId ? includedMap.get(`tasks:${taskId}`) : undefined;
+      const taskTitle = taskAttrs?.title as string | undefined;
 
       const hours = Math.floor(entry.attributes.time / 60);
       const minutes = entry.attributes.time % 60;
@@ -138,9 +158,9 @@ export async function listTimeEntresTool(
   Date: ${entry.attributes.date}
   Time: ${timeDisplay}${billableDisplay}
   Note: ${entry.attributes.note || 'No note'}
-  Person ID: ${personId || 'Unknown'}
-  Service ID: ${serviceId || 'Unknown'}
-  Task ID: ${taskId || 'None'}
+  Person: ${personName || personId || 'Unknown'}${personId ? ` (ID: ${personId})` : ''}
+  Service: ${serviceName || serviceId || 'Unknown'}${serviceId ? ` (ID: ${serviceId})` : ''}
+  Task: ${taskTitle || (taskId ? `ID: ${taskId}` : 'None')}
   Project ID: ${projectId || 'None'}`;
     }).join('\n\n');
 
@@ -207,6 +227,14 @@ export const listTimeEntriesDefinition = {
       service_id: {
         type: 'string',
         description: 'Filter by service ID',
+      },
+      company_id: {
+        type: 'string',
+        description: 'Filter by company ID',
+      },
+      sort: {
+        type: 'string',
+        description: 'Sort field. Prefix with - for descending. Options: date, updated_at. Default: -date (most recent first)',
       },
       limit: {
         type: 'number',
@@ -495,6 +523,8 @@ const updateTimeEntrySchema = z.object({
   time: z.string().optional(),
   billable_time: z.string().optional(),
   note: z.string().optional(),
+  task_id: z.string().optional(),
+  service_id: z.string().optional(),
 });
 
 export async function updateTimeEntryTool(
@@ -510,7 +540,8 @@ export async function updateTimeEntryTool(
     if (params.billable_time) attributes.billable_time = parseTimeToMinutes(params.billable_time);
     if (params.note) attributes.note = params.note;
 
-    if (Object.keys(attributes).length === 0) {
+    const hasRelationships = !!params.task_id || !!params.service_id;
+    if (Object.keys(attributes).length === 0 && !hasRelationships) {
       throw new McpError(ErrorCode.InvalidParams, 'At least one field to update is required');
     }
 
@@ -521,6 +552,17 @@ export async function updateTimeEntryTool(
         attributes,
       },
     };
+
+    const relationships: Record<string, { data: { id: string; type: string } }> = {};
+    if (params.task_id) {
+      relationships.task = { data: { id: params.task_id, type: 'tasks' } };
+    }
+    if (params.service_id) {
+      relationships.service = { data: { id: params.service_id, type: 'services' } };
+    }
+    if (Object.keys(relationships).length > 0) {
+      updateData.data.relationships = relationships;
+    }
 
     const response = await client.updateTimeEntry(params.id, updateData);
     const entry = response.data;
@@ -556,6 +598,8 @@ export const updateTimeEntryDefinition = {
       time: { type: 'string', description: 'New time duration (e.g., "2h", "120m", "2.5")' },
       billable_time: { type: 'string', description: 'New billable time duration' },
       note: { type: 'string', description: 'New note/description' },
+      task_id: { type: 'string', description: 'Task ID to link the time entry to' },
+      service_id: { type: 'string', description: 'Service ID to move the time entry to a different service/project' },
     },
     required: ['id'],
   },
