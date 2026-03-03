@@ -1,11 +1,14 @@
 import { Config } from '../config/index.js';
 import {
   ProductiveCompany,
+  ProductiveCompanyCreate,
   ProductiveProject,
   ProductiveTask,
   ProductiveBoard,
   ProductiveTaskList,
   ProductivePerson,
+  ProductivePersonCreate,
+  ProductivePersonUpdate,
   ProductiveActivity,
   ProductiveComment,
   ProductiveWorkflowStatus,
@@ -55,6 +58,8 @@ import {
   ProductiveBookingCreate,
   ProductiveBookingUpdate,
   ProductiveReportEntry,
+  ProductiveMembership,
+  ProductiveMembershipCreate,
 } from './types.js';
 
 export class ProductiveAPIClient {
@@ -88,7 +93,10 @@ export class ProductiveAPIClient {
         let errorMessage = `API request failed with status ${response.status}`;
         try {
           const errorData = await response.json() as ProductiveError;
-          errorMessage = errorData.errors?.[0]?.detail || errorMessage;
+          const firstError = errorData.errors?.[0];
+          const parts = [firstError?.detail, firstError?.title].filter(Boolean);
+          if (firstError?.source?.pointer) parts.push(`(source: ${firstError.source.pointer})`);
+          errorMessage = parts.join(' ') || errorMessage;
         } catch { /* non-JSON error body */ }
         throw new Error(errorMessage);
       }
@@ -108,26 +116,31 @@ export class ProductiveAPIClient {
   
   async listCompanies(params?: {
     status?: 'active' | 'archived';
+    query?: string;
     limit?: number;
     page?: number;
   }): Promise<ProductiveResponse<ProductiveCompany>> {
     const queryParams = new URLSearchParams();
-    
+
     if (params?.status) {
       queryParams.append('filter[status]', params.status);
     }
-    
+
+    if (params?.query) {
+      queryParams.append('filter[query]', params.query);
+    }
+
     if (params?.limit) {
       queryParams.append('page[size]', params.limit.toString());
     }
-    
+
     if (params?.page) {
       queryParams.append('page[number]', params.page.toString());
     }
-    
+
     const queryString = queryParams.toString();
     const path = `companies${queryString ? `?${queryString}` : ''}`;
-    
+
     return this.makeRequest<ProductiveResponse<ProductiveCompany>>(path);
   }
   
@@ -139,6 +152,8 @@ export class ProductiveAPIClient {
     page?: number;
   }): Promise<ProductiveResponse<ProductiveProject>> {
     const queryParams = new URLSearchParams();
+
+    queryParams.append('include', 'company');
 
     if (params?.status) {
       // Convert status string to integer: active = 1, archived = 2
@@ -153,21 +168,28 @@ export class ProductiveAPIClient {
     if (params?.template !== undefined) {
       queryParams.append('filter[template]', params.template ? '1' : '0');
     }
-    
+
     if (params?.limit) {
       queryParams.append('page[size]', params.limit.toString());
     }
-    
+
     if (params?.page) {
       queryParams.append('page[number]', params.page.toString());
     }
-    
+
     const queryString = queryParams.toString();
     const path = `projects${queryString ? `?${queryString}` : ''}`;
-    
+
     return this.makeRequest<ProductiveResponse<ProductiveProject>>(path);
   }
   
+  async createCompany(data: ProductiveCompanyCreate): Promise<ProductiveSingleResponse<ProductiveCompany>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveCompany>>('companies', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async createProject(projectData: ProductiveProjectCreate): Promise<ProductiveSingleResponse<ProductiveProject>> {
     return this.makeRequest<ProductiveSingleResponse<ProductiveProject>>('projects', {
       method: 'POST',
@@ -236,6 +258,13 @@ export class ProductiveAPIClient {
     });
   }
 
+  async closeDeal(id: string): Promise<ProductiveSingleResponse<ProductiveDeal>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveDeal>>(`deals/${id}/close`, {
+      method: 'PATCH',
+      body: JSON.stringify({}),
+    });
+  }
+
   async updateBoard(id: string, data: ProductiveBoardUpdate): Promise<ProductiveSingleResponse<ProductiveBoard>> {
     return this.makeRequest<ProductiveSingleResponse<ProductiveBoard>>(`boards/${id}`, {
       method: 'PATCH',
@@ -260,7 +289,7 @@ export class ProductiveAPIClient {
   // ── Get single resource methods ──
 
   async getProject(id: string, params?: { include?: string }): Promise<ProductiveSingleResponse<ProductiveProject>> {
-    const query = params?.include ? `?include=${params.include}` : '';
+    const query = `?include=${params?.include || 'company,project_manager'}`;
     return this.makeRequest<ProductiveSingleResponse<ProductiveProject>>(`projects/${id}${query}`);
   }
 
@@ -276,7 +305,7 @@ export class ProductiveAPIClient {
 
   async getDeal(id: string): Promise<ProductiveSingleResponse<ProductiveDeal>> {
     return this.makeRequest<ProductiveSingleResponse<ProductiveDeal>>(
-      `deals/${id}?fields[deals]=name,budget,budget_type,date,currency,value,total_value,invoiced_amount,cost,profit,probability,delivered_on,closed_at,note,created_at,updated_at&include=deal_status,project`
+      `deals/${id}?fields[deals]=name,budget,budget_type,date,end_date,currency,value,total_value,invoiced_amount,cost,profit,probability,delivered_on,closed_at,note,created_at,updated_at&include=deal_status,project`
     );
   }
 
@@ -295,7 +324,106 @@ export class ProductiveAPIClient {
     return this.makeRequest<ProductiveSingleResponse<ProductivePerson>>(`people/${id}${query}`);
   }
 
+  async createPerson(data: ProductivePersonCreate): Promise<ProductiveSingleResponse<ProductivePerson>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductivePerson>>('people', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updatePerson(id: string, data: ProductivePersonUpdate): Promise<ProductiveSingleResponse<ProductivePerson>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductivePerson>>(`people/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async invitePerson(id: string, companyId: string, customRoleId: string, subsidiaryId?: string): Promise<ProductiveSingleResponse<ProductivePerson>> {
+    const relationships: Record<string, unknown> = {
+      company: { data: { type: 'companies', id: companyId } },
+      custom_role: { data: { type: 'custom_roles', id: customRoleId } },
+    };
+    if (subsidiaryId) {
+      relationships.subsidiary = { data: { type: 'subsidiaries', id: subsidiaryId } };
+    }
+    return this.makeRequest<ProductiveSingleResponse<ProductivePerson>>(`people/${id}/invite`, {
+      method: 'PATCH',
+      body: JSON.stringify({ data: { type: 'people', attributes: {}, relationships } }),
+    });
+  }
+
+  async listCustomRoles(params?: { limit?: number; page?: number }): Promise<ProductiveResponse<{ id: string; type: string; attributes: Record<string, unknown> }>> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) queryParams.append('page[size]', params.limit.toString());
+    if (params?.page) queryParams.append('page[number]', params.page.toString());
+    const queryString = queryParams.toString();
+    return this.makeRequest(`roles${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async listSubsidiaries(): Promise<ProductiveResponse<{ id: string; type: string; attributes: Record<string, unknown> }>> {
+    return this.makeRequest('subsidiaries');
+  }
+
+  async listHolidayCalendars(): Promise<ProductiveResponse<{ id: string; type: string; attributes: Record<string, unknown> }>> {
+    return this.makeRequest('holiday_calendars');
+  }
+
+  async createSalary(personId: string, attrs: {
+    salary_type_id: number;
+    currency: string;
+    cost: number;
+    working_hours: number[];
+    holiday_calendar_id: number;
+    started_on?: string;
+    overhead?: boolean;
+  }): Promise<ProductiveSingleResponse<{ id: string; type: string; attributes: Record<string, unknown> }>> {
+    return this.makeRequest('salaries', {
+      method: 'POST',
+      body: JSON.stringify({
+        data: {
+          type: 'salaries',
+          attributes: attrs,
+          relationships: {
+            person: { data: { type: 'people', id: personId } },
+          },
+        },
+      }),
+    });
+  }
+
+  async listSalaries(personId: string): Promise<ProductiveResponse<{ id: string; type: string; attributes: Record<string, unknown> }>> {
+    return this.makeRequest(`salaries?filter[person_id]=${personId}`);
+  }
+
+  async updateSalary(id: string, attrs: Record<string, unknown>): Promise<ProductiveSingleResponse<{ id: string; type: string; attributes: Record<string, unknown> }>> {
+    return this.makeRequest(`salaries/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        data: {
+          type: 'salaries',
+          id,
+          attributes: attrs,
+        },
+      }),
+    });
+  }
+
+  async deleteSalary(id: string): Promise<void> {
+    await this.makeRequest<void>(`salaries/${id}`, { method: 'DELETE' });
+  }
+
   // ── Delete methods ──
+
+  async updateCompany(id: string, data: import('./types.js').ProductiveCompanyUpdate): Promise<ProductiveSingleResponse<ProductiveCompany>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveCompany>>(`companies/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteCompany(id: string): Promise<void> {
+    await this.makeRequest<void>(`companies/${id}`, { method: 'DELETE' });
+  }
 
   async deleteProject(id: string): Promise<void> {
     await this.makeRequest<void>(`projects/${id}`, { method: 'DELETE' });
@@ -357,6 +485,12 @@ export class ProductiveAPIClient {
     project_id?: string;
     assignee_id?: string;
     status?: 'open' | 'closed';
+    query?: string;
+    due_date_after?: string;
+    due_date_before?: string;
+    task_list_id?: string;
+    board_id?: string;
+    company_id?: string;
     closed_after?: string;
     closed_before?: string;
     last_activity_after?: string;
@@ -376,9 +510,32 @@ export class ProductiveAPIClient {
     }
 
     if (params?.status) {
-      // Convert status names to integers: open = 1, closed = 2
       const statusValue = params.status === 'open' ? '1' : '2';
       queryParams.append('filter[status]', statusValue);
+    }
+
+    if (params?.query) {
+      queryParams.append('filter[query]', params.query);
+    }
+
+    if (params?.due_date_after) {
+      queryParams.append('filter[due_date_after]', params.due_date_after);
+    }
+
+    if (params?.due_date_before) {
+      queryParams.append('filter[due_date_before]', params.due_date_before);
+    }
+
+    if (params?.task_list_id) {
+      queryParams.append('filter[task_list_id]', params.task_list_id);
+    }
+
+    if (params?.board_id) {
+      queryParams.append('filter[board_id]', params.board_id);
+    }
+
+    if (params?.company_id) {
+      queryParams.append('filter[company_id]', params.company_id);
     }
 
     if (params?.closed_after) {
@@ -409,8 +566,6 @@ export class ProductiveAPIClient {
       queryParams.append('page[number]', params.page.toString());
     }
 
-    // Include relationships needed for display
-    // Note: Productive API uses 'assignee' (singular), not 'assignees'
     queryParams.append('include', 'assignee,workflow_status,project');
 
     const queryString = queryParams.toString();
@@ -550,15 +705,16 @@ export class ProductiveAPIClient {
     company_id?: string;
     item_type?: string;
     event?: string;
-    after?: string; // ISO 8601 date string
-    before?: string; // ISO 8601 date string
+    after?: string;
+    before?: string;
+    sort?: string;
     limit?: number;
     page?: number;
   }): Promise<ProductiveResponse<ProductiveActivity>> {
     const queryParams = new URLSearchParams();
 
-    // Include creator relationship for display
     queryParams.append('include', 'creator');
+    if (params?.sort) queryParams.append('sort', params.sort);
 
     if (params?.task_id) {
       queryParams.append('filter[task_id]', params.task_id);
@@ -608,6 +764,22 @@ export class ProductiveAPIClient {
     const path = `activities${queryString ? `?${queryString}` : ''}`;
 
     return this.makeRequest<ProductiveResponse<ProductiveActivity>>(path);
+  }
+
+  async listComments(params?: {
+    task_id?: string;
+    project_id?: string;
+    limit?: number;
+    page?: number;
+  }): Promise<ProductiveResponse<ProductiveComment>> {
+    const queryParams = new URLSearchParams();
+    queryParams.append('include', 'creator');
+    if (params?.task_id) queryParams.append('filter[task_id]', params.task_id);
+    if (params?.project_id) queryParams.append('filter[project_id]', params.project_id);
+    if (params?.limit) queryParams.append('page[size]', params.limit.toString());
+    if (params?.page) queryParams.append('page[number]', params.page.toString());
+    const queryString = queryParams.toString();
+    return this.makeRequest<ProductiveResponse<ProductiveComment>>(`comments?${queryString}`);
   }
 
   async deleteComment(id: string): Promise<void> {
@@ -683,6 +855,8 @@ export class ProductiveAPIClient {
     task_id?: string;
     service_id?: string;
     company_id?: string;
+    approved?: boolean;
+    invoiced?: boolean;
     sort?: string;
     limit?: number;
     page?: number;
@@ -725,6 +899,14 @@ export class ProductiveAPIClient {
 
     if (params?.company_id) {
       queryParams.append('filter[company_id]', params.company_id);
+    }
+
+    if (params?.approved !== undefined) {
+      queryParams.append('filter[approved]', params.approved.toString());
+    }
+
+    if (params?.invoiced !== undefined) {
+      queryParams.append('filter[invoiced]', params.invoiced.toString());
     }
 
     if (params?.limit) {
@@ -796,11 +978,9 @@ export class ProductiveAPIClient {
     page?: number;
   }): Promise<ProductiveResponse<ProductiveDeal>> {
     const queryParams = new URLSearchParams();
-    
-    // Include project relationship
-    queryParams.append('include', 'project');
-    
-    // Filter by project - deals endpoint expects array format
+
+    queryParams.append('include', 'project,deal_status,company');
+
     queryParams.append('filter[project_id]', params.project_id);
     
     if (params.budget_type) {
@@ -842,21 +1022,21 @@ export class ProductiveAPIClient {
     page?: number;
   }): Promise<ProductiveResponse<ProductiveService>> {
     const queryParams = new URLSearchParams();
-    
-    // Filter by deal/budget
+
+    queryParams.append('include', 'deal');
     queryParams.append('filter[deal_id]', params.deal_id);
-    
+
     if (params.limit) {
       queryParams.append('page[size]', params.limit.toString());
     }
-    
+
     if (params.page) {
       queryParams.append('page[number]', params.page.toString());
     }
-    
+
     const queryString = queryParams.toString();
     const path = `services${queryString ? `?${queryString}` : ''}`;
-    
+
     return this.makeRequest<ProductiveResponse<ProductiveService>>(path);
   }
 
@@ -877,26 +1057,38 @@ export class ProductiveAPIClient {
    */
   async listServices(params?: {
     company_id?: string;
+    deal_id?: string;
+    name?: string;
     limit?: number;
     page?: number;
   }): Promise<ProductiveResponse<ProductiveService>> {
     const queryParams = new URLSearchParams();
-    
+
+    queryParams.append('include', 'deal');
+
     if (params?.company_id) {
       queryParams.append('filter[company_id]', params.company_id);
     }
-    
+
+    if (params?.deal_id) {
+      queryParams.append('filter[deal_id]', params.deal_id);
+    }
+
+    if (params?.name) {
+      queryParams.append('filter[name]', params.name);
+    }
+
     if (params?.limit) {
       queryParams.append('page[size]', params.limit.toString());
     }
-    
+
     if (params?.page) {
       queryParams.append('page[number]', params.page.toString());
     }
-    
+
     const queryString = queryParams.toString();
     const path = `services${queryString ? `?${queryString}` : ''}`;
-    
+
     return this.makeRequest<ProductiveResponse<ProductiveService>>(path);
   }
 
@@ -1073,29 +1265,25 @@ export class ProductiveAPIClient {
     deal_id?: string;
     project_id?: string;
     invoice_status?: string;
+    query?: string;
+    invoiced_on_after?: string;
+    invoiced_on_before?: string;
+    sort?: string;
     limit?: number;
     page?: number;
   }): Promise<ProductiveResponse<ProductiveInvoice>> {
     const queryParams = new URLSearchParams();
     queryParams.append('include', 'company,document_type');
-    if (params?.company_id) {
-      queryParams.append('filter[company_id]', params.company_id);
-    }
-    if (params?.deal_id) {
-      queryParams.append('filter[deal_id]', params.deal_id);
-    }
-    if (params?.project_id) {
-      queryParams.append('filter[project_id]', params.project_id);
-    }
-    if (params?.invoice_status) {
-      queryParams.append('filter[invoice_status]', params.invoice_status);
-    }
-    if (params?.limit) {
-      queryParams.append('page[size]', params.limit.toString());
-    }
-    if (params?.page) {
-      queryParams.append('page[number]', params.page.toString());
-    }
+    if (params?.sort) queryParams.append('sort', params.sort);
+    if (params?.company_id) queryParams.append('filter[company_id]', params.company_id);
+    if (params?.deal_id) queryParams.append('filter[deal_id]', params.deal_id);
+    if (params?.project_id) queryParams.append('filter[project_id]', params.project_id);
+    if (params?.invoice_status) queryParams.append('filter[invoice_status]', params.invoice_status);
+    if (params?.query) queryParams.append('filter[query]', params.query);
+    if (params?.invoiced_on_after) queryParams.append('filter[invoiced_on_after]', params.invoiced_on_after);
+    if (params?.invoiced_on_before) queryParams.append('filter[invoiced_on_before]', params.invoiced_on_before);
+    if (params?.limit) queryParams.append('page[size]', params.limit.toString());
+    if (params?.page) queryParams.append('page[number]', params.page.toString());
     const queryString = queryParams.toString();
     const path = `invoices${queryString ? `?${queryString}` : ''}`;
     return this.makeRequest<ProductiveResponse<ProductiveInvoice>>(path);
@@ -1209,6 +1397,10 @@ export class ProductiveAPIClient {
 
   async deletePage(id: string): Promise<void> {
     await this.makeRequest<void>(`pages/${id}`, { method: 'DELETE' });
+  }
+
+  async getPage(id: string): Promise<ProductiveSingleResponse<ProductivePage>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductivePage>>(`pages/${id}`);
   }
 
   async listPages(params?: {
@@ -1499,5 +1691,18 @@ export class ProductiveAPIClient {
     if (params?.page) queryParams.append('page[number]', params.page.toString());
     const queryString = queryParams.toString();
     return this.makeRequest<ProductiveResponse<ProductiveReportEntry>>(`reports/${reportType}?${queryString}`);
+  }
+
+  // --- Memberships ---
+
+  async createMembership(data: ProductiveMembershipCreate): Promise<ProductiveSingleResponse<ProductiveMembership>> {
+    return this.makeRequest<ProductiveSingleResponse<ProductiveMembership>>('memberships', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteMembership(id: string): Promise<void> {
+    await this.makeRequest<void>(`memberships/${id}`, { method: 'DELETE' });
   }
 }

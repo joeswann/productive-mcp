@@ -6,15 +6,15 @@ import { getConfig } from './config/index.js';
 import { ProductiveAPIClient } from './api/client.js';
 import { listProjectsTool, createProjectTool, updateProjectTool, getProjectTool, deleteProjectTool, copyProjectTool, listProjectsDefinition, createProjectDefinition, updateProjectDefinition, getProjectDefinition, deleteProjectDefinition, copyProjectDefinition } from './tools/projects.js';
 import { listTasksTool, getProjectTasksTool, getTaskTool, createTaskTool, updateTaskAssignmentTool, updateTaskDetailsTool, deleteTaskTool, listTasksDefinition, getProjectTasksDefinition, getTaskDefinition, createTaskDefinition, updateTaskAssignmentDefinition, updateTaskDetailsDefinition, deleteTaskDefinition } from './tools/tasks.js';
-import { listCompaniesTool, getCompanyTool, listCompaniesDefinition, getCompanyDefinition } from './tools/companies.js';
+import { listCompaniesTool, getCompanyTool, createCompanyTool, updateCompanyTool, deleteCompanyTool, listCompaniesDefinition, getCompanyDefinition, createCompanyDefinition, updateCompanyDefinition, deleteCompanyDefinition } from './tools/companies.js';
 import { myTasksTool, myTasksDefinition } from './tools/my-tasks.js';
 import { listBoards, createBoard, updateBoard, getBoard, deleteBoard, listBoardsTool, createBoardTool, updateBoardTool, getBoardTool, deleteBoardTool } from './tools/boards.js';
 import { listTaskLists, createTaskList, updateTaskList, getTaskList, deleteTaskList, listTaskListsTool, createTaskListTool, updateTaskListTool, getTaskListTool, deleteTaskListTool } from './tools/task-lists.js';
 import { whoAmI, whoAmITool } from './tools/whoami.js';
 import { listActivities, listActivitiesTool } from './tools/activities.js';
 import { getRecentUpdates, getRecentUpdatesTool } from './tools/recent-updates.js';
-import { addTaskCommentTool, addTaskCommentDefinition, deleteTaskCommentTool, deleteTaskCommentDefinition } from './tools/comments.js';
-import { listDocumentsTool, listDocumentsDefinition, createDocumentTool, createDocumentDefinition, updateDocumentTool, updateDocumentDefinition, deleteDocumentTool, deleteDocumentDefinition } from './tools/documents.js';
+import { addTaskCommentTool, addTaskCommentDefinition, deleteTaskCommentTool, deleteTaskCommentDefinition, listCommentsTool, listCommentsDefinition } from './tools/comments.js';
+import { listDocumentsTool, listDocumentsDefinition, getDocumentTool, getDocumentDefinition, createDocumentTool, createDocumentDefinition, updateDocumentTool, updateDocumentDefinition, deleteDocumentTool, deleteDocumentDefinition } from './tools/documents.js';
 import { updateTaskStatusTool, updateTaskStatusDefinition } from './tools/task-status.js';
 import { listWorkflowStatusesTool, listWorkflowStatusesDefinition } from './tools/workflow-statuses.js';
 import { listTimeEntriesTool, createTimeEntryTool, updateTimeEntryTool, deleteTimeEntryTool, listTimeEntriesDefinition, createTimeEntryDefinition, updateTimeEntryDefinition, deleteTimeEntryDefinition } from './tools/time-entries.js';
@@ -24,13 +24,15 @@ import { updateTaskSprint, updateTaskSprintTool } from './tools/task-sprint.js';
 import { moveTaskToList, moveTaskToListTool } from './tools/task-list-move.js';
 import { addToBacklog, addToBacklogTool } from './tools/task-backlog.js';
 import { taskRepositionTool, taskRepositionDefinition, taskRepositionSchema } from './tools/task-reposition.js';
-import { listDocumentTypesTool, listDocumentTypesDefinition, listInvoicesTool, listInvoicesDefinition, getInvoiceTool, getInvoiceDefinition, deleteInvoiceTool, deleteInvoiceDefinition, createInvoiceTool, createInvoiceDefinition, updateInvoiceTool, updateInvoiceDefinition, linkInvoiceToBudgetTool, linkInvoiceToBudgetDefinition, createLineItemTool, createLineItemDefinition, finalizeInvoiceTool, finalizeInvoiceDefinition, listPaymentsTool, listPaymentsDefinition, deletePaymentTool, deletePaymentDefinition } from './tools/invoices.js';
+import { listTaxRatesTool, listTaxRatesDefinition, listDocumentTypesTool, listDocumentTypesDefinition, listInvoicesTool, listInvoicesDefinition, getInvoiceTool, getInvoiceDefinition, deleteInvoiceTool, deleteInvoiceDefinition, createInvoiceTool, createInvoiceDefinition, updateInvoiceTool, updateInvoiceDefinition, linkInvoiceToBudgetTool, linkInvoiceToBudgetDefinition, createLineItemTool, createLineItemDefinition, finalizeInvoiceTool, finalizeInvoiceDefinition, listPaymentsTool, listPaymentsDefinition, deletePaymentTool, deletePaymentDefinition, listInvoiceAttributionsTool, listInvoiceAttributionsDefinition, deleteInvoiceAttributionTool, deleteInvoiceAttributionDefinition } from './tools/invoices.js';
 import { listExpensesTool, listExpensesDefinition, createExpenseTool, createExpenseDefinition, deleteExpenseTool, deleteExpenseDefinition } from './tools/expenses.js';
 import { listRateCardsTool, listRateCardsDefinition, getRateCardTool, getRateCardDefinition, createRateCardTool, createRateCardDefinition, updateRateCardTool, updateRateCardDefinition, deleteRateCardTool, deleteRateCardDefinition, archiveRateCardTool, archiveRateCardDefinition, restoreRateCardTool, restoreRateCardDefinition } from './tools/rate-cards.js';
 import { listPricesTool, listPricesDefinition, getPriceTool, getPriceDefinition, createPriceTool, createPriceDefinition, updatePriceTool, updatePriceDefinition, deletePriceTool, deletePriceDefinition } from './tools/prices.js';
 import { listTodosTool, listTodosDefinition, createTodoTool, createTodoDefinition, updateTodoTool, updateTodoDefinition, deleteTodoTool, deleteTodoDefinition } from './tools/todos.js';
 import { listBookingsTool, listBookingsDefinition, getBookingTool, getBookingDefinition, createBookingTool, createBookingDefinition, updateBookingTool, updateBookingDefinition, deleteBookingTool, deleteBookingDefinition } from './tools/bookings.js';
 import { getReportTool, getReportDefinition } from './tools/reports.js';
+import { listPeopleTool, listPeopleDefinition, getPersonTool, getPersonDefinition, createPersonTool, createPersonDefinition, updatePersonTool, updatePersonDefinition, listCustomRolesTool, listCustomRolesDefinition, invitePersonTool, invitePersonDefinition, setCostRateTool, setCostRateDefinition, listCostRatesTool, listCostRatesDefinition, updateCostRateTool, updateCostRateDefinition } from './tools/people.js';
+import { addProjectMemberTool, addProjectMemberDefinition } from './tools/memberships.js';
 import { generateTimesheetPrompt, timesheetPromptDefinition, generateQuickTimesheetPrompt, quickTimesheetPromptDefinition } from './prompts/timesheet.js';
 
 export async function createServer() {
@@ -59,6 +61,9 @@ export async function createServer() {
       whoAmITool,
       listCompaniesDefinition,
       getCompanyDefinition,
+      createCompanyDefinition,
+      updateCompanyDefinition,
+      deleteCompanyDefinition,
       listProjectsDefinition,
       getProjectDefinition,
       createProjectDefinition,
@@ -83,6 +88,7 @@ export async function createServer() {
       updateTaskDetailsDefinition,
       deleteTaskDefinition,
       addTaskCommentDefinition,
+      listCommentsDefinition,
       updateTaskStatusDefinition,
       listWorkflowStatusesDefinition,
       myTasksDefinition,
@@ -106,6 +112,7 @@ export async function createServer() {
       moveTaskToListTool,
       addToBacklogTool,
       taskRepositionDefinition,
+      listTaxRatesDefinition,
       listDocumentTypesDefinition,
       listInvoicesDefinition,
       getInvoiceDefinition,
@@ -117,8 +124,11 @@ export async function createServer() {
       finalizeInvoiceDefinition,
       listPaymentsDefinition,
       deletePaymentDefinition,
+      listInvoiceAttributionsDefinition,
+      deleteInvoiceAttributionDefinition,
       deleteTaskCommentDefinition,
       listDocumentsDefinition,
+      getDocumentDefinition,
       createDocumentDefinition,
       updateDocumentDefinition,
       deleteDocumentDefinition,
@@ -147,6 +157,16 @@ export async function createServer() {
       updateBookingDefinition,
       deleteBookingDefinition,
       getReportDefinition,
+      listPeopleDefinition,
+      getPersonDefinition,
+      createPersonDefinition,
+      updatePersonDefinition,
+      listCustomRolesDefinition,
+      invitePersonDefinition,
+      setCostRateDefinition,
+      listCostRatesDefinition,
+      updateCostRateDefinition,
+      addProjectMemberDefinition,
     ],
   }));
 
@@ -162,6 +182,15 @@ export async function createServer() {
 
       case 'get_company':
         return await getCompanyTool(apiClient, args);
+
+      case 'create_company':
+        return await createCompanyTool(apiClient, args);
+
+      case 'update_company':
+        return await updateCompanyTool(apiClient, args);
+
+      case 'delete_company':
+        return await deleteCompanyTool(apiClient, args);
 
       case 'list_projects':
         return await listProjectsTool(apiClient, args);
@@ -222,6 +251,9 @@ export async function createServer() {
 
       case 'add_task_comment':
         return await addTaskCommentTool(apiClient, args);
+
+      case 'list_comments':
+        return await listCommentsTool(apiClient, args);
 
       case 'update_task_status':
         return await updateTaskStatusTool(apiClient, args);
@@ -308,6 +340,9 @@ export async function createServer() {
         }
         return await taskRepositionTool(apiClient, args as z.infer<typeof taskRepositionSchema>);
 
+      case 'list_tax_rates':
+        return await listTaxRatesTool(apiClient, args);
+
       case 'list_document_types':
         return await listDocumentTypesTool(apiClient, args);
 
@@ -341,11 +376,20 @@ export async function createServer() {
       case 'delete_payment':
         return await deletePaymentTool(apiClient, args);
 
+      case 'list_invoice_attributions':
+        return await listInvoiceAttributionsTool(apiClient, args);
+
+      case 'delete_invoice_attribution':
+        return await deleteInvoiceAttributionTool(apiClient, args);
+
       case 'delete_task_comment':
         return await deleteTaskCommentTool(apiClient, args);
 
       case 'list_documents':
         return await listDocumentsTool(apiClient, args);
+
+      case 'get_document':
+        return await getDocumentTool(apiClient, args);
 
       case 'create_document':
         return await createDocumentTool(apiClient, args);
@@ -430,6 +474,36 @@ export async function createServer() {
 
       case 'get_report':
         return await getReportTool(apiClient, args);
+
+      case 'list_people':
+        return await listPeopleTool(apiClient, args);
+
+      case 'get_person':
+        return await getPersonTool(apiClient, args);
+
+      case 'create_person':
+        return await createPersonTool(apiClient, args);
+
+      case 'update_person':
+        return await updatePersonTool(apiClient, args);
+
+      case 'list_custom_roles':
+        return await listCustomRolesTool(apiClient, args);
+
+      case 'invite_person':
+        return await invitePersonTool(apiClient, args);
+
+      case 'set_cost_rate':
+        return await setCostRateTool(apiClient, args);
+
+      case 'list_cost_rates':
+        return await listCostRatesTool(apiClient, args);
+
+      case 'update_cost_rate':
+        return await updateCostRateTool(apiClient, args);
+
+      case 'add_project_member':
+        return await addProjectMemberTool(apiClient, args);
 
       default:
         throw new Error(`Unknown tool: ${name}`);

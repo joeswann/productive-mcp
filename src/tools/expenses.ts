@@ -40,17 +40,34 @@ export async function listExpensesTool(
       };
     }
 
+    // Build lookup map from included resources
+    const includedMap = new Map<string, Record<string, unknown>>();
+    if (response.included) {
+      for (const item of response.included) {
+        includedMap.set(`${item.type}:${item.id}`, item.attributes);
+      }
+    }
+
     const expensesText = response.data.map(expense => {
       const serviceId = expense.relationships?.service?.data?.id;
       const personId = expense.relationships?.person?.data?.id;
+      const dealId = expense.relationships?.deal?.data?.id;
+
+      // Resolve names from included data
+      const personAttrs = personId ? includedMap.get(`people:${personId}`) : undefined;
+      const personName = personAttrs ? `${personAttrs.first_name} ${personAttrs.last_name}`.trim() : undefined;
+      const serviceAttrs = serviceId ? includedMap.get(`services:${serviceId}`) : undefined;
+      const serviceName = serviceAttrs?.name as string | undefined;
+      const dealAttrs = dealId ? includedMap.get(`deals:${dealId}`) : undefined;
+      const dealName = dealAttrs?.name as string | undefined;
 
       return `\u2022 Expense (ID: ${expense.id})
   Name: ${expense.attributes.name}
   Amount: ${expense.attributes.amount} ${expense.attributes.currency}
   Date: ${expense.attributes.date}
   Approved: ${expense.attributes.approved ? 'Yes' : 'No'}
-  Service ID: ${serviceId || 'None'}
-  Person ID: ${personId || 'None'}`;
+  Person: ${personName || (personId ? `ID: ${personId}` : 'None')}
+  Service: ${serviceName || (serviceId ? `ID: ${serviceId}` : 'None')}${dealName ? `\n  Deal: ${dealName} (ID: ${dealId})` : dealId ? `\n  Deal ID: ${dealId}` : ''}`;
     }).join('\n\n');
 
     const summary = `Found ${response.data.length} expense${response.data.length !== 1 ? 's' : ''}${response.meta?.total_count ? ` (showing ${response.data.length} of ${response.meta.total_count})` : ''}:\n\n${expensesText}`;

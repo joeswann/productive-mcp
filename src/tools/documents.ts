@@ -209,6 +209,62 @@ export async function listDocumentsTool(
   }
 }
 
+const getDocumentSchema = z.object({
+  document_id: z.string().min(1, 'Document ID is required'),
+});
+
+export async function getDocumentTool(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = getDocumentSchema.parse(args);
+    const response = await client.getPage(params.document_id);
+    const page = response.data;
+
+    let text = `Title: ${page.attributes.title}\n`;
+    text += `ID: ${page.id}\n`;
+    if (page.attributes.created_at) {
+      text += `Created: ${page.attributes.created_at}\n`;
+    }
+    if (page.attributes.updated_at) {
+      text += `Updated: ${page.attributes.updated_at}\n`;
+    }
+    text += `\n--- Body ---\n`;
+    text += page.attributes.body || '(empty)';
+
+    return {
+      content: [{ type: 'text', text }],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`
+      );
+    }
+    throw new McpError(
+      ErrorCode.InternalError,
+      error instanceof Error ? error.message : 'Unknown error occurred'
+    );
+  }
+}
+
+export const getDocumentDefinition = {
+  name: 'get_document',
+  description: 'Get a single document (doc/page) from Productive.io by ID. Returns the full document including body content.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      document_id: {
+        type: 'string',
+        description: 'ID of the document to retrieve (required)',
+      },
+    },
+    required: ['document_id'],
+  },
+};
+
 export const listDocumentsDefinition = {
   name: 'list_documents',
   description: 'List documents (pages) in Productive.io. Can filter by project.',

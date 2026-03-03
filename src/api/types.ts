@@ -19,6 +19,32 @@ export interface ProductiveCompany {
   };
 }
 
+export interface ProductiveCompanyCreate {
+  data: {
+    type: 'companies';
+    attributes: {
+      name: string;
+      billing_name?: string;
+      vat?: string;
+      default_currency?: string;
+      description?: string;
+    };
+  };
+}
+
+export interface ProductiveCompanyUpdate {
+  data: {
+    type: 'companies';
+    attributes: {
+      name?: string;
+      billing_name?: string | null;
+      vat?: string | null;
+      default_currency?: string | null;
+      description?: string | null;
+    };
+  };
+}
+
 export interface ProductiveProject {
   id: string;
   type: 'projects';
@@ -301,6 +327,49 @@ export interface ProductivePerson {
       };
     };
     [key: string]: unknown;
+  };
+}
+
+export interface ProductivePersonCreate {
+  data: {
+    type: 'people';
+    attributes: {
+      first_name: string;
+      last_name: string;
+      email: string;
+      title?: string;
+      hrm_type_id?: number; // 1=Employee, 2=Contact
+    };
+    relationships?: {
+      company?: {
+        data: {
+          id: string;
+          type: 'companies';
+        };
+      };
+    };
+  };
+}
+
+export interface ProductivePersonUpdate {
+  data: {
+    type: 'people';
+    id: string;
+    attributes?: {
+      first_name?: string;
+      last_name?: string;
+      email?: string;
+      title?: string;
+      is_active?: boolean;
+    };
+    relationships?: {
+      company?: {
+        data: {
+          id: string;
+          type: 'companies';
+        };
+      };
+    };
   };
 }
 
@@ -712,6 +781,8 @@ export interface ProductiveDealUpdate {
       note?: string;
       value?: string;
       closed_at?: string | null;
+      end_date?: string | null;
+      client_access?: boolean;
     };
     relationships?: {
       company?: {
@@ -732,6 +803,35 @@ export interface ProductiveDealUpdate {
           type: 'projects';
         };
       };
+    };
+  };
+}
+
+export interface ProductiveMembership {
+  id: string;
+  type: 'memberships';
+  attributes: {
+    access_type_id: number;
+    type_id: number;
+    target_type?: string;
+    [key: string]: unknown;
+  };
+  relationships?: {
+    person?: { data: { id: string; type: 'people' } };
+    project?: { data: { id: string; type: 'projects' } };
+    [key: string]: unknown;
+  };
+}
+
+export interface ProductiveMembershipCreate {
+  data: {
+    type: 'memberships';
+    attributes: {
+      person_id: number;
+      project_id?: number;
+      deal_id?: number;
+      type_id: number; // 1=person, 2=dynamic_group, 3=team
+      access_type_id: number; // 1=full, 2=edit, 3=view, 4=comment, 5=member
     };
   };
 }

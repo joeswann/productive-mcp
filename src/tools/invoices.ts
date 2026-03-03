@@ -3,6 +3,51 @@ import { ProductiveAPIClient } from '../api/client.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { ProductiveInvoiceCreate, ProductiveInvoiceUpdate, ProductiveInvoiceAttributionCreate, ProductiveLineItemCreate } from '../api/types.js';
 
+// --- List Tax Rates ---
+
+const listTaxRatesSchema = z.object({
+  limit: z.number().min(1).max(200).default(50).optional(),
+});
+
+export async function listTaxRatesTool(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = listTaxRatesSchema.parse(args || {});
+    const response = await client.listTaxRates({ limit: params.limit });
+
+    if (!response?.data?.length) {
+      return { content: [{ type: 'text', text: 'No tax rates found.' }] };
+    }
+
+    const lines = response.data.map((tr: { id: string; attributes: Record<string, unknown> }) => {
+      const a = tr.attributes;
+      return `• ${a.name ?? 'Unknown'} (ID: ${tr.id}) — ${a.tax_percentage ?? '?'}%`;
+    });
+
+    return {
+      content: [{ type: 'text', text: `Found ${response.data.length} tax rate(s):\n\n${lines.join('\n')}` }],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`);
+    }
+    throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : 'Unknown error occurred');
+  }
+}
+
+export const listTaxRatesDefinition = {
+  name: 'list_tax_rates',
+  description: 'List available tax rates in Productive.io. Use this to find the correct tax_rate_id for line items (e.g. 0% for export/overseas clients, 15% NZ GST for domestic).',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      limit: { type: 'number', description: 'Max results (1-200, default: 50)', default: 50, minimum: 1, maximum: 200 },
+    },
+  },
+};
+
 // --- List Document Types ---
 
 const listDocumentTypesSchema = z.object({
@@ -66,6 +111,10 @@ const listInvoicesSchema = z.object({
   deal_id: z.string().optional().describe('Filter by deal/budget ID'),
   project_id: z.string().optional().describe('Filter by project ID'),
   invoice_status: z.string().optional().describe('Filter by status'),
+  query: z.string().optional().describe('Text search across invoice number and subject'),
+  invoiced_on_after: z.string().optional().describe('Filter invoices dated on or after (YYYY-MM-DD)'),
+  invoiced_on_before: z.string().optional().describe('Filter invoices dated on or before (YYYY-MM-DD)'),
+  sort: z.string().optional().describe('Sort field. Prefix with - for descending. Options: invoiced_on, number, amount_with_tax'),
   limit: z.number().min(1).max(200).default(30).optional(),
   page: z.number().int().min(1).optional(),
 });
@@ -82,6 +131,10 @@ export async function listInvoicesTool(
       deal_id: params.deal_id,
       project_id: params.project_id,
       invoice_status: params.invoice_status,
+      query: params.query,
+      invoiced_on_after: params.invoiced_on_after,
+      invoiced_on_before: params.invoiced_on_before,
+      sort: params.sort,
       limit: params.limit,
       page: params.page,
     });
@@ -127,6 +180,10 @@ export const listInvoicesDefinition = {
       deal_id: { type: 'string', description: 'Filter by deal/budget ID' },
       project_id: { type: 'string', description: 'Filter by project ID' },
       invoice_status: { type: 'string', description: 'Filter by invoice status' },
+      query: { type: 'string', description: 'Text search across invoice number and subject' },
+      invoiced_on_after: { type: 'string', description: 'Filter invoices dated on or after (YYYY-MM-DD)' },
+      invoiced_on_before: { type: 'string', description: 'Filter invoices dated on or before (YYYY-MM-DD)' },
+      sort: { type: 'string', description: 'Sort field. Prefix with - for descending. Options: invoiced_on, number, amount_with_tax' },
       limit: { type: 'number', description: 'Max results (1-200)', minimum: 1, maximum: 200, default: 30 },
       page: { type: 'number', description: 'Page number', minimum: 1 },
     },
@@ -232,7 +289,7 @@ const createInvoiceSchema = z.object({
   company_id: z.string().min(1, 'Company ID is required'),
   document_type_id: z.string().min(1, 'Document type ID is required'),
   invoiced_on: z.string().min(1, 'Invoice date is required').describe('YYYY-MM-DD'),
-  currency: z.string().default('NZD'),
+  currency: z.string().optional().describe('Currency code. If omitted, uses the company\'s default_currency (falls back to NZD).'),
   subject: z.string().optional(),
   number: z.string().optional().describe('Invoice number (e.g. "INV-0365")'),
   pay_on: z.string().optional().describe('Due date (YYYY-MM-DD)'),
@@ -256,6 +313,17 @@ export async function createInvoiceTool(
       throw new McpError(ErrorCode.InvalidParams, 'amount is required when deal_id is provided (for invoice attribution)');
     }
 
+    // Resolve currency: explicit param > company default > NZD
+    let currency = params.currency;
+    if (!currency) {
+      try {
+        const companyResponse = await client.getCompany(params.company_id);
+        currency = companyResponse.data?.attributes?.default_currency as string || 'NZD';
+      } catch {
+        currency = 'NZD';
+      }
+    }
+
     // Extract Xero UUID from URL or use explicit param
     let xeroId = params.xero_invoice_id;
     if (!xeroId && params.xero_invoice_url) {
@@ -268,7 +336,7 @@ export async function createInvoiceTool(
         type: 'invoices',
         attributes: {
           invoiced_on: params.invoiced_on,
-          currency: params.currency,
+          currency,
           ...(params.subject && { subject: params.subject }),
           ...(params.number && { number: params.number }),
           ...(params.pay_on && { pay_on: params.pay_on }),
@@ -337,14 +405,14 @@ export async function createInvoiceTool(
 
 export const createInvoiceDefinition = {
   name: 'create_invoice',
-  description: 'STEP 1 of invoice workflow: Create a new draft invoice (starts at $0). FULL WORKFLOW: 1) create_invoice → 2) create_line_item (gives it amounts + tax) → 3) link_invoice_to_budget (connects to deal, attribution amount MUST match invoice total) → 4) finalize_invoice (one-way, locks it). Optionally provide xero_invoice_url to store a link to the corresponding Xero invoice. If deal_id and amount are provided, auto-creates the invoice attribution (step 3).',
+  description: 'STEP 1 of invoice workflow: Create a new draft invoice (starts at $0). FULL WORKFLOW: 1) create_invoice → 2) create_line_item (gives it amounts + tax, use list_tax_rates to find correct tax_rate_id) → 3) link_invoice_to_budget (connects to deal, attribution amount MUST match invoice total) → 4) finalize_invoice (one-way, locks it). Optionally provide xero_invoice_url to store a link to the corresponding Xero invoice. If deal_id and amount are provided, auto-creates the invoice attribution (step 3). Currency auto-resolves from the company\'s default_currency if not provided.',
   inputSchema: {
     type: 'object',
     properties: {
       company_id: { type: 'string', description: 'Company ID (required)' },
       document_type_id: { type: 'string', description: 'Document type ID (required). Use list_document_types to find available templates.' },
       invoiced_on: { type: 'string', description: 'Invoice date in YYYY-MM-DD format (required)' },
-      currency: { type: 'string', description: 'Currency code (default: NZD)', default: 'NZD' },
+      currency: { type: 'string', description: 'Currency code. If omitted, auto-resolves from company default_currency (falls back to NZD).' },
       subject: { type: 'string', description: 'Invoice subject/title' },
       number: { type: 'string', description: 'Invoice number (e.g. "INV-0365")' },
       pay_on: { type: 'string', description: 'Due date (YYYY-MM-DD)' },
@@ -641,6 +709,96 @@ export const finalizeInvoiceDefinition = {
     type: 'object',
     properties: {
       id: { type: 'string', description: 'Invoice ID to finalize (required)' },
+    },
+    required: ['id'],
+  },
+};
+
+// --- List Invoice Attributions ---
+
+const listInvoiceAttributionsSchema = z.object({
+  invoice_id: z.string().optional().describe('Filter by invoice ID'),
+  budget_id: z.string().optional().describe('Filter by budget/deal ID'),
+  limit: z.number().min(1).max(200).default(30).optional(),
+});
+
+export async function listInvoiceAttributionsTool(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = listInvoiceAttributionsSchema.parse(args || {});
+    const response = await client.listInvoiceAttributions({
+      invoice_id: params.invoice_id,
+      budget_id: params.budget_id,
+      limit: params.limit,
+    });
+
+    if (!response.data || response.data.length === 0) {
+      return { content: [{ type: 'text', text: 'No invoice attributions found.' }] };
+    }
+
+    const text = response.data.map(attr => {
+      const invoiceId = attr.relationships?.invoice?.data?.id ?? '?';
+      const budgetId = attr.relationships?.budget?.data?.id ?? '?';
+      return `- Attribution ${attr.id}: invoice=${invoiceId}, budget=${budgetId}, amount=${attr.attributes.amount ?? '?'}`;
+    }).join('\n');
+
+    return {
+      content: [{ type: 'text', text: `Found ${response.data.length} attribution(s):\n\n${text}` }],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`);
+    }
+    throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : 'Unknown error occurred');
+  }
+}
+
+export const listInvoiceAttributionsDefinition = {
+  name: 'list_invoice_attributions',
+  description: 'List invoice attributions (links between invoices and budgets/deals). Filter by invoice_id or budget_id to find specific attributions.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      invoice_id: { type: 'string', description: 'Filter by invoice ID' },
+      budget_id: { type: 'string', description: 'Filter by budget/deal ID' },
+      limit: { type: 'number', description: 'Max results (1-200)', minimum: 1, maximum: 200, default: 30 },
+    },
+  },
+};
+
+// --- Delete Invoice Attribution ---
+
+const deleteInvoiceAttributionSchema = z.object({
+  id: z.string().min(1, 'Attribution ID is required'),
+});
+
+export async function deleteInvoiceAttributionTool(
+  client: ProductiveAPIClient,
+  args: unknown
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = deleteInvoiceAttributionSchema.parse(args);
+    await client.deleteInvoiceAttribution(params.id);
+    return {
+      content: [{ type: 'text', text: `Invoice attribution ${params.id} deleted successfully.` }],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(ErrorCode.InvalidParams, `Invalid parameters: ${error.errors.map(e => e.message).join(', ')}`);
+    }
+    throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : 'Unknown error occurred');
+  }
+}
+
+export const deleteInvoiceAttributionDefinition = {
+  name: 'delete_invoice_attribution',
+  description: 'Delete an invoice attribution (unlink an invoice from a budget/deal). Use list_invoice_attributions to find the attribution ID first.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'Attribution ID to delete (required)' },
     },
     required: ['id'],
   },

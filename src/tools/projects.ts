@@ -28,14 +28,16 @@ export async function listProjectsTool(
 
     let allData: Array<{ id: string; attributes: Record<string, unknown>; relationships?: Record<string, unknown> }> = [];
 
+    let allIncluded: Array<{ id: string; type: string; attributes: Record<string, unknown> }> = [];
+
     if (params.status === 'all' || !params.status) {
-      // Fetch both active and archived, splitting the limit between them
       const halfLimit = Math.ceil((params.limit || 30) / 2);
       const [activeResp, archivedResp] = await Promise.all([
         client.listProjects({ status: 'active', company_id: params.company_id, template: params.template, limit: halfLimit }),
         client.listProjects({ status: 'archived', company_id: params.company_id, template: params.template, limit: halfLimit }),
       ]);
       allData = [...(activeResp?.data || []), ...(archivedResp?.data || [])];
+      allIncluded = [...(activeResp?.included || []), ...(archivedResp?.included || [])];
     } else {
       const response = await client.listProjects({
         status: params.status,
@@ -44,6 +46,7 @@ export async function listProjectsTool(
         limit: params.limit,
       });
       allData = response?.data || [];
+      allIncluded = response?.included || [];
     }
 
     if (allData.length === 0) {
@@ -55,12 +58,20 @@ export async function listProjectsTool(
       };
     }
 
+    // Build lookup for company names from included data
+    const companyMap = new Map<string, string>();
+    for (const inc of allIncluded) {
+      if (inc.type === 'companies') companyMap.set(inc.id, String(inc.attributes.name || ''));
+    }
+
     const projectsText = allData.filter(project => project && project.attributes).map(project => {
       const companyId = (project.relationships?.company as { data?: { id?: string } } | undefined)?.data?.id;
+      const companyName = companyId ? companyMap.get(companyId) : undefined;
       const isArchived = project.attributes.archived_at || project.attributes.status === 'archived';
+      const companyDisplay = companyName ? `Company: ${companyName} (ID: ${companyId})` : companyId ? `Company ID: ${companyId}` : '';
       return `• ${project.attributes.name} (ID: ${project.id})${isArchived ? ' [ARCHIVED]' : ''}
   Status: ${project.attributes.status}
-  ${companyId ? `Company ID: ${companyId}` : ''}
+  ${companyDisplay}
   ${project.attributes.description ? `Description: ${project.attributes.description}` : 'No description'}`;
     }).join('\n\n');
 
@@ -218,6 +229,7 @@ export const createProjectDefinition = {
 const updateProjectSchema = z.object({
   id: z.string().min(1, 'Project ID is required'),
   name: z.string().optional(),
+  description: z.string().optional(),
   company_id: z.string().optional(),
   project_manager_id: z.string().optional(),
   project_type_id: z.number().int().min(1).max(2).optional(),
@@ -248,6 +260,7 @@ export async function updateProjectTool(
 
     const attributes: Record<string, unknown> = {};
     if (params.name) attributes.name = params.name;
+    if (params.description !== undefined) attributes.description = params.description;
     if (managerId) attributes.project_manager_id = parseInt(managerId, 10);
     if (params.project_type_id) attributes.project_type_id = params.project_type_id;
     if (params.workflow_id) attributes.workflow_id = parseInt(params.workflow_id, 10);
@@ -293,6 +306,7 @@ export async function updateProjectTool(
 
     const changes: string[] = [];
     if (params.name) changes.push(`Name: ${params.name}`);
+    if (params.description !== undefined) changes.push(`Description: ${params.description || '(cleared)'}`);
     if (params.company_id) changes.push(`Company ID: ${params.company_id}`);
     if (managerId) changes.push(`Project Manager ID: ${managerId}`);
     if (params.project_type_id) changes.push(`Project Type: ${params.project_type_id}`);
@@ -329,6 +343,7 @@ export const updateProjectDefinition = {
     properties: {
       id: { type: 'string', description: 'Project ID to update (required)' },
       name: { type: 'string', description: 'New project name' },
+      description: { type: 'string', description: 'New project description (use empty string to clear)' },
       company_id: { type: 'string', description: 'New company ID' },
       project_manager_id: { type: 'string', description: 'New project manager person ID (use "me" for configured user)' },
       project_type_id: { type: 'number', description: 'Project type: 1=internal, 2=client', minimum: 1, maximum: 2 },
@@ -352,12 +367,31 @@ export async function getProjectTool(
     const params = getProjectSchema.parse(args);
     const response = await client.getProject(params.id);
     const p = response.data;
-    const companyId = p.relationships?.company?.data?.id;
+    const companyId = (p.relationships?.company as { data?: { id?: string } } | undefined)?.data?.id;
+    const pmId = (p.relationships?.project_manager as { data?: { id?: string } } | undefined)?.data?.id;
+
+    // Resolve names from included
+    const includedMap = new Map<string, Record<string, unknown>>();
+    if (response.included) {
+      for (const inc of response.included) {
+        includedMap.set(`${inc.type}:${inc.id}`, inc.attributes);
+      }
+    }
+    const companyName = companyId ? includedMap.get(`companies:${companyId}`)?.name as string : undefined;
+    const pmAttrs = pmId ? includedMap.get(`people:${pmId}`) : undefined;
+    const pmName = pmAttrs ? `${pmAttrs.first_name} ${pmAttrs.last_name}`.trim() : undefined;
+
+    const lines: string[] = [
+      `Project: ${p.attributes.name} (ID: ${p.id})`,
+      `Status: ${p.attributes.status}`,
+      companyName ? `Company: ${companyName} (ID: ${companyId})` : companyId ? `Company ID: ${companyId}` : '',
+      pmName ? `Project Manager: ${pmName} (ID: ${pmId})` : pmId ? `Project Manager ID: ${pmId}` : '',
+      p.attributes.description ? `Description: ${p.attributes.description}` : 'No description',
+      `Created: ${p.attributes.created_at}`,
+    ].filter(Boolean);
+
     return {
-      content: [{
-        type: 'text',
-        text: `Project: ${p.attributes.name} (ID: ${p.id})\nStatus: ${p.attributes.status}\n${companyId ? `Company ID: ${companyId}` : ''}\n${p.attributes.description ? `Description: ${p.attributes.description}` : 'No description'}\nCreated: ${p.attributes.created_at}`,
-      }],
+      content: [{ type: 'text', text: lines.join('\n') }],
     };
   } catch (error) {
     if (error instanceof z.ZodError) {

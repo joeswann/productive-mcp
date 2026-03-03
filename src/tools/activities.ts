@@ -13,6 +13,7 @@ const ListActivitiesRequestSchema = z.object({
   after: z.string().optional(), // ISO 8601 date string
   before: z.string().optional(), // ISO 8601 date string
   days_back: z.number().min(1).max(365).optional(), // Helper for "last N days"
+  sort: z.string().optional().describe('Sort field. Prefix with - for descending. Options: created_at'),
   limit: z.number().min(1).max(200).optional(),
   page: z.number().min(1).optional(),
 });
@@ -42,6 +43,7 @@ export async function listActivities(
       event: params.event,
       after,
       before: params.before,
+      sort: params.sort,
       limit: params.limit,
       page: params.page,
     });
@@ -172,6 +174,10 @@ export const listActivitiesTool = {
         description: 'Filter activities from the last N days (1-365). Alternative to using "after"',
         minimum: 1,
         maximum: 365,
+      },
+      sort: {
+        type: 'string',
+        description: 'Sort field. Prefix with - for descending. Options: created_at',
       },
       limit: {
         type: 'number',

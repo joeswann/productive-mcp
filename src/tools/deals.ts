@@ -33,13 +33,36 @@ export async function listProjectDealsTool(
       };
     }
 
+    // Build lookup maps from included resources
+    const includedMap = new Map<string, Record<string, unknown>>();
+    if (response.included) {
+      for (const item of response.included) {
+        includedMap.set(`${item.type}:${item.id}`, item.attributes);
+      }
+    }
+
     const dealsText = response.data.map(deal => {
       const budgetType = deal.attributes.budget_type === 1 ? 'Deal' :
                         deal.attributes.budget_type === 2 ? 'Budget' : 'Unknown';
       const value = deal.attributes.value ? ` (Value: ${deal.attributes.value})` : '';
 
-      return `• ${budgetType} (ID: ${deal.id})
-  Name: ${deal.attributes.name}${value}`;
+      // Resolve names from included data
+      const rels = deal.relationships as Record<string, { data?: { id: string; type: string } }> | undefined;
+      const statusId = rels?.deal_status?.data?.id;
+      const statusAttrs = statusId ? includedMap.get(`deal_statuses:${statusId}`) : undefined;
+      const statusName = statusAttrs?.name as string | undefined;
+      const companyId = rels?.company?.data?.id;
+      const companyAttrs = companyId ? includedMap.get(`companies:${companyId}`) : undefined;
+      const companyName = companyAttrs?.name as string | undefined;
+
+      const extras: string[] = [];
+      extras.push(`Name: ${deal.attributes.name}${value}`);
+      if (statusName) extras.push(`Status: ${statusName}`);
+      if (companyName) extras.push(`Company: ${companyName} (ID: ${companyId})`);
+      else if (companyId) extras.push(`Company ID: ${companyId}`);
+      if (deal.attributes.closed_at) extras.push(`Closed: ${deal.attributes.closed_at}`);
+
+      return `• ${budgetType} (ID: ${deal.id})\n  ${extras.join('\n  ')}`;
     }).join('\n\n');
 
     const typeFilter = params.budget_type === 1 ? ' deals' :
@@ -193,6 +216,8 @@ const updateDealSchema = z.object({
   value: z.string().optional().describe('Budget/deal value as string (e.g. "3220.0")'),
   reopen: z.boolean().optional().describe('Set to true to reopen a closed budget/deal (clears closed_at)'),
   closed_at: z.string().optional().describe('Set closed_at date (ISO 8601 datetime, e.g. "2026-02-10T00:00:00.000+13:00") to close/re-close a deal'),
+  end_date: z.string().optional().describe('Budget end date (YYYY-MM-DD). Time entries must fall within date..end_date range. Set to extend budget date range.'),
+  client_access: z.boolean().optional().describe('Enable/disable client portal access to this budget. When true, clients added to the project can see services, billable time, and budget totals.'),
 });
 
 export async function updateDealTool(
@@ -220,15 +245,25 @@ export async function updateDealTool(
     if (params.budget_type !== undefined) attributes.budget_type = params.budget_type;
     if (params.note) attributes.note = params.note;
     if (params.value !== undefined) attributes.value = params.value;
-    if (params.closed_at) attributes.closed_at = params.closed_at;
+    if (params.end_date) attributes.end_date = params.end_date;
+    if (params.client_access !== undefined) attributes.client_access = params.client_access;
     // Use dedicated /open endpoint for reopening closed deals
     if (params.reopen) {
       try {
         await client.openDeal(params.id);
       } catch (e) {
-        // /open endpoint may not exist, return error info
         return {
           content: [{ type: 'text', text: `Failed to reopen deal: ${e instanceof Error ? e.message : String(e)}` }],
+        };
+      }
+    }
+    // Use dedicated /close endpoint for closing deals (closed_at is read-only on PATCH)
+    if (params.closed_at) {
+      try {
+        await client.closeDeal(params.id);
+      } catch (e) {
+        return {
+          content: [{ type: 'text', text: `Failed to close deal: ${e instanceof Error ? e.message : String(e)}` }],
         };
       }
     }
@@ -268,6 +303,8 @@ export async function updateDealTool(
     if (params.value !== undefined) changes.push(`Value: ${params.value}`);
     if (params.reopen) changes.push('Reopened (cleared closed_at)');
     if (params.closed_at) changes.push(`Closed at: ${params.closed_at}`);
+    if (params.end_date) changes.push(`End date: ${params.end_date}`);
+    if (params.client_access !== undefined) changes.push(`Client access: ${params.client_access ? 'enabled' : 'disabled'}`);
 
     return {
       content: [{
@@ -303,6 +340,8 @@ export const updateDealDefinition = {
       value: { type: 'string', description: 'Budget/deal value as string (e.g. "3220.0")' },
       reopen: { type: 'boolean', description: 'Set to true to reopen a closed budget/deal (clears closed_at)' },
       closed_at: { type: 'string', description: 'Set closed_at date (ISO 8601 datetime, e.g. "2026-02-10T00:00:00.000+13:00") to close/re-close a deal' },
+      end_date: { type: 'string', description: 'Budget end date (YYYY-MM-DD). Time entries must fall within date..end_date range.' },
+      client_access: { type: 'boolean', description: 'Enable/disable client portal access to this budget. When true, clients can see services, billable time, and budget totals.' },
     },
     required: ['id'],
   },
@@ -331,6 +370,7 @@ export async function getDealTool(
       `${budgetType}: ${a.name} (ID: ${d.id})`,
       projectId ? `Project ID: ${projectId}` : '',
       a.date ? `Date: ${a.date}` : '',
+      (a as Record<string, unknown>).end_date ? `End Date: ${(a as Record<string, unknown>).end_date}` : '',
       a.currency ? `Currency: ${a.currency}` : '',
       a.value ? `Value: ${a.value}` : '',
       a.total_value ? `Total Value: ${a.total_value}` : '',

@@ -7,6 +7,12 @@ const listTasksSchema = z.object({
   project_id: z.string().optional(),
   assignee_id: z.string().optional(),
   status: z.enum(['open', 'closed']).optional(),
+  query: z.string().optional(),
+  due_date_after: z.string().optional(),
+  due_date_before: z.string().optional(),
+  task_list_id: z.string().optional(),
+  board_id: z.string().optional(),
+  company_id: z.string().optional(),
   closed_after: z.string().optional(),
   closed_before: z.string().optional(),
   last_activity_after: z.string().optional(),
@@ -35,6 +41,12 @@ export async function listTasksTool(
       project_id: params.project_id,
       assignee_id: params.assignee_id,
       status: params.status,
+      query: params.query,
+      due_date_after: params.due_date_after,
+      due_date_before: params.due_date_before,
+      task_list_id: params.task_list_id,
+      board_id: params.board_id,
+      company_id: params.company_id,
       closed_after: params.closed_after,
       closed_before: params.closed_before,
       last_activity_after: params.last_activity_after,
@@ -283,50 +295,25 @@ export async function getTaskTool(
 
 export const listTasksDefinition = {
   name: 'list_tasks',
-  description: 'Get a list of tasks from Productive.io. Includes project name, assignee, workflow status, and date fields (closed_at, last_activity_at). Supports date-range filters and sorting.',
+  description: 'Get a list of tasks from Productive.io. Includes project name, assignee, workflow status, and date fields. Supports text search, date-range filters, and sorting.',
   inputSchema: {
     type: 'object',
     properties: {
-      project_id: {
-        type: 'string',
-        description: 'Filter tasks by project ID',
-      },
-      assignee_id: {
-        type: 'string',
-        description: 'Filter tasks by assignee ID',
-      },
-      status: {
-        type: 'string',
-        enum: ['open', 'closed'],
-        description: 'Filter by task status (open or closed)',
-      },
-      closed_after: {
-        type: 'string',
-        description: 'Filter tasks closed after this date (YYYY-MM-DD)',
-      },
-      closed_before: {
-        type: 'string',
-        description: 'Filter tasks closed before this date (YYYY-MM-DD)',
-      },
-      last_activity_after: {
-        type: 'string',
-        description: 'Filter tasks with last activity after this date (YYYY-MM-DD)',
-      },
-      last_activity_before: {
-        type: 'string',
-        description: 'Filter tasks with last activity before this date (YYYY-MM-DD)',
-      },
-      sort: {
-        type: 'string',
-        description: 'Sort field. Prefix with - for descending. Options: created_at, updated_at, closed_at, last_activity_at, due_date, title, worked_time, project_name. Example: -last_activity_at',
-      },
-      limit: {
-        type: 'number',
-        description: 'Number of tasks to return (1-200)',
-        minimum: 1,
-        maximum: 200,
-        default: 30,
-      },
+      project_id: { type: 'string', description: 'Filter tasks by project ID' },
+      assignee_id: { type: 'string', description: 'Filter tasks by assignee ID' },
+      status: { type: 'string', enum: ['open', 'closed'], description: 'Filter by task status' },
+      query: { type: 'string', description: 'Text search across task titles and descriptions' },
+      due_date_after: { type: 'string', description: 'Filter tasks due after this date (YYYY-MM-DD)' },
+      due_date_before: { type: 'string', description: 'Filter tasks due before this date (YYYY-MM-DD)' },
+      task_list_id: { type: 'string', description: 'Filter by task list ID' },
+      board_id: { type: 'string', description: 'Filter by board ID' },
+      company_id: { type: 'string', description: 'Filter by company ID' },
+      closed_after: { type: 'string', description: 'Filter tasks closed after this date (YYYY-MM-DD)' },
+      closed_before: { type: 'string', description: 'Filter tasks closed before this date (YYYY-MM-DD)' },
+      last_activity_after: { type: 'string', description: 'Filter tasks with last activity after this date (YYYY-MM-DD)' },
+      last_activity_before: { type: 'string', description: 'Filter tasks with last activity before this date (YYYY-MM-DD)' },
+      sort: { type: 'string', description: 'Sort field. Prefix with - for descending. Options: created_at, updated_at, closed_at, last_activity_at, due_date, title, worked_time, project_name. Example: -last_activity_at' },
+      limit: { type: 'number', description: 'Number of tasks to return (1-200)', minimum: 1, maximum: 200, default: 30 },
     },
   },
 };
@@ -374,6 +361,8 @@ const createTaskSchema = z.object({
   task_list_id: z.string().optional(),
   assignee_id: z.string().optional(),
   due_date: z.string().optional(),
+  initial_estimate: z.number().optional().describe('Estimated time in minutes'),
+  priority: z.number().int().min(0).max(3).optional().describe('0=none, 1=low, 2=medium, 3=high'),
   status: z.enum(['open', 'closed']).optional().default('open'),
 });
 
@@ -404,6 +393,8 @@ export async function createTaskTool(
           title: params.title,
           description: params.description,
           due_date: params.due_date,
+          ...(params.initial_estimate !== undefined && { initial_estimate: params.initial_estimate }),
+          ...(params.priority !== undefined && { priority: params.priority }),
           status: params.status === 'open' ? 1 : 2,
         },
         relationships: {} as any,
@@ -533,6 +524,16 @@ export const createTaskDefinition = {
         type: 'string',
         description: 'Due date in YYYY-MM-DD format',
       },
+      initial_estimate: {
+        type: 'number',
+        description: 'Estimated time in minutes (e.g. 120 = 2 hours)',
+      },
+      priority: {
+        type: 'number',
+        description: 'Priority: 0=none, 1=low, 2=medium, 3=high',
+        minimum: 0,
+        maximum: 3,
+      },
       status: {
         type: 'string',
         enum: ['open', 'closed'],
@@ -648,6 +649,8 @@ const updateTaskDetailsSchema = z.object({
   title: z.string().min(1, 'Task title cannot be empty').optional(),
   description: z.string().optional(),
   due_date: z.string().optional(),
+  initial_estimate: z.number().optional().describe('Estimated time in minutes'),
+  priority: z.number().int().min(0).max(3).optional().describe('0=none, 1=low, 2=medium, 3=high'),
 });
 
 export async function updateTaskDetailsTool(
@@ -658,10 +661,10 @@ export async function updateTaskDetailsTool(
     const params = updateTaskDetailsSchema.parse(args);
     
     // Ensure at least one field is being updated
-    if (!params.title && params.description === undefined && params.due_date === undefined) {
+    if (!params.title && params.description === undefined && params.due_date === undefined && params.initial_estimate === undefined && params.priority === undefined) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        'At least one field (title, description, or due_date) must be provided for update'
+        'At least one field (title, description, due_date, initial_estimate, or priority) must be provided for update'
       );
     }
     
@@ -684,6 +687,14 @@ export async function updateTaskDetailsTool(
 
     if (params.due_date !== undefined) {
       taskUpdate.data.attributes!.due_date = params.due_date;
+    }
+
+    if (params.initial_estimate !== undefined) {
+      (taskUpdate.data.attributes as Record<string, unknown>).initial_estimate = params.initial_estimate;
+    }
+
+    if (params.priority !== undefined) {
+      (taskUpdate.data.attributes as Record<string, unknown>).priority = params.priority;
     }
 
     const response = await client.updateTask(params.task_id, taskUpdate);
@@ -734,26 +745,16 @@ export async function updateTaskDetailsTool(
 
 export const updateTaskDetailsDefinition = {
   name: 'update_task_details',
-  description: 'Update the title (name), description, and/or due date of an existing task. At least one field must be provided.',
+  description: 'Update task details: title, description, due date, initial estimate, and/or priority. At least one field must be provided.',
   inputSchema: {
     type: 'object',
     properties: {
-      task_id: {
-        type: 'string',
-        description: 'ID of the task to update (required)',
-      },
-      title: {
-        type: 'string',
-        description: 'New title/name for the task (optional, but cannot be empty if provided)',
-      },
-      description: {
-        type: 'string',
-        description: 'New description for the task (optional, use empty string to clear description)',
-      },
-      due_date: {
-        type: 'string',
-        description: 'Due date in YYYY-MM-DD format (optional)',
-      },
+      task_id: { type: 'string', description: 'ID of the task to update (required)' },
+      title: { type: 'string', description: 'New title/name for the task' },
+      description: { type: 'string', description: 'New description (use empty string to clear)' },
+      due_date: { type: 'string', description: 'Due date in YYYY-MM-DD format' },
+      initial_estimate: { type: 'number', description: 'Estimated time in minutes (e.g. 120 = 2 hours)' },
+      priority: { type: 'number', description: 'Priority: 0=none, 1=low, 2=medium, 3=high', minimum: 0, maximum: 3 },
     },
     required: ['task_id'],
   },

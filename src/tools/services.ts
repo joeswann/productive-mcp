@@ -6,6 +6,8 @@ import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
 const listServicesSchema = z.object({
   company_id: z.string().optional(),
+  deal_id: z.string().optional().describe('Filter by deal/budget ID'),
+  name: z.string().optional().describe('Filter by service name'),
   limit: z.number().min(1).max(200).default(30).optional(),
 });
 
@@ -18,6 +20,8 @@ export async function listServicesTool(
 
     const response = await client.listServices({
       company_id: params.company_id,
+      deal_id: params.deal_id,
+      name: params.name,
       limit: params.limit,
     });
 
@@ -30,11 +34,27 @@ export async function listServicesTool(
       };
     }
 
+    // Build lookup map from included resources
+    const includedMap = new Map<string, Record<string, unknown>>();
+    if (response.included) {
+      for (const item of response.included) {
+        includedMap.set(`${item.type}:${item.id}`, item.attributes);
+      }
+    }
+
     const servicesText = response.data.map(service => {
       const companyId = service.relationships?.company?.data?.id;
-      return `• ${service.attributes.name} (ID: ${service.id})
-  ${companyId ? `Company ID: ${companyId}` : ''}
-  ${service.attributes.description ? `Description: ${service.attributes.description}` : 'No description'}`;
+      const dealId = service.relationships?.deal?.data?.id;
+      const dealAttrs = dealId ? includedMap.get(`deals:${dealId}`) : undefined;
+      const dealName = dealAttrs?.name as string | undefined;
+
+      const extras: string[] = [];
+      if (dealName) extras.push(`Deal: ${dealName} (ID: ${dealId})`);
+      else if (dealId) extras.push(`Deal ID: ${dealId}`);
+      if (companyId) extras.push(`Company ID: ${companyId}`);
+      if (service.attributes.description) extras.push(`Description: ${service.attributes.description}`);
+
+      return `• ${service.attributes.name} (ID: ${service.id})\n  ${extras.join('\n  ') || 'No details'}`;
     }).join('\n\n');
 
     const summary = `Found ${response.data.length} service${response.data.length !== 1 ? 's' : ''}${response.meta?.total_count ? ` (showing ${response.data.length} of ${response.meta.total_count})` : ''}:\n\n${servicesText}`;
@@ -62,6 +82,14 @@ export const listServicesDefinition = {
       company_id: {
         type: 'string',
         description: 'Filter services by company ID',
+      },
+      deal_id: {
+        type: 'string',
+        description: 'Filter by deal/budget ID',
+      },
+      name: {
+        type: 'string',
+        description: 'Filter by service name',
       },
       limit: {
         type: 'number',
@@ -218,6 +246,8 @@ export async function createServiceTool(
 
 const updateServiceSchema = z.object({
   id: z.string().min(1, 'Service ID is required'),
+  billing_type_id: z.number().int().min(1).max(3).optional().describe('1=Fixed, 2=Time and Materials, 3=Not Billable'),
+  unit_id: z.number().int().min(1).max(3).optional().describe('1=Hour, 2=Piece, 3=Day'),
   expense_tracking_enabled: z.boolean().optional(),
   time_tracking_enabled: z.boolean().optional(),
   booking_tracking_enabled: z.boolean().optional(),
@@ -236,6 +266,8 @@ export async function updateServiceTool(
     const { id, ...attrs } = params;
 
     const attributes: Record<string, unknown> = {};
+    if (attrs.billing_type_id !== undefined) attributes.billing_type_id = attrs.billing_type_id;
+    if (attrs.unit_id !== undefined) attributes.unit_id = attrs.unit_id;
     if (attrs.expense_tracking_enabled !== undefined) attributes.expense_tracking_enabled = attrs.expense_tracking_enabled;
     if (attrs.time_tracking_enabled !== undefined) attributes.time_tracking_enabled = attrs.time_tracking_enabled;
     if (attrs.booking_tracking_enabled !== undefined) attributes.booking_tracking_enabled = attrs.booking_tracking_enabled;
@@ -272,6 +304,8 @@ export const updateServiceDefinition = {
     type: 'object',
     properties: {
       id: { type: 'string', description: 'Service ID to update (required)' },
+      billing_type_id: { type: 'number', description: '1=Fixed, 2=Time and Materials, 3=Not Billable', minimum: 1, maximum: 3 },
+      unit_id: { type: 'number', description: '1=Hour, 2=Piece, 3=Day', minimum: 1, maximum: 3 },
       expense_tracking_enabled: { type: 'boolean', description: 'Enable/disable expense tracking on this service' },
       time_tracking_enabled: { type: 'boolean', description: 'Enable/disable time tracking on this service' },
       booking_tracking_enabled: { type: 'boolean', description: 'Enable/disable booking tracking on this service' },

@@ -70,6 +70,8 @@ const listTimeEntriesSchema = z.object({
   task_id: z.string().optional(),
   service_id: z.string().optional(),
   company_id: z.string().optional(),
+  approved: z.boolean().optional().describe('Filter by approval status'),
+  invoiced: z.boolean().optional().describe('Filter by invoiced status'),
   sort: z.string().optional(),
   limit: z.number().min(1).max(200).default(30).optional(),
 });
@@ -103,6 +105,8 @@ export async function listTimeEntriesTool(
       task_id: params.task_id,
       service_id: params.service_id,
       company_id: params.company_id,
+      approved: params.approved,
+      invoiced: params.invoiced,
       sort: params.sort,
       limit: params.limit,
     });
@@ -231,6 +235,14 @@ export const listTimeEntriesDefinition = {
       company_id: {
         type: 'string',
         description: 'Filter by company ID',
+      },
+      approved: {
+        type: 'boolean',
+        description: 'Filter by approval status (true = approved only, false = unapproved only)',
+      },
+      invoiced: {
+        type: 'boolean',
+        description: 'Filter by invoiced status (true = invoiced only, false = uninvoiced only)',
       },
       sort: {
         type: 'string',
