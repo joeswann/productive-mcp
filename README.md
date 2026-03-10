@@ -2,7 +2,7 @@
 
 [![npm version](https://badge.fury.io/js/productive-mcp.svg)](https://www.npmjs.com/package/productive-mcp)
 
-> Fork of [berwickgeek/productive-mcp](https://github.com/berwickgeek/productive-mcp) with additional tools for boards, task lists, task operations, people management, and activity tracking. Significantly diverged from upstream (14 commits ahead, 7 behind).
+> Fork of [berwickgeek/productive-mcp](https://github.com/berwickgeek/productive-mcp) with additional tools for boards, task lists, task operations, people management, and activity tracking. Significantly diverged from upstream (15 ahead, 7 behind). Both sides independently built the same features (timesheets, sprint assignment, task repositioning), so merging isn't practical.
 
 An MCP (Model Context Protocol) server that enables Claude Desktop, Claude Code, and other MCP-compatible clients to interact with the Productive.io API.
 
