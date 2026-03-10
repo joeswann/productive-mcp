@@ -28,7 +28,7 @@
     "project-management"
   ],
   "author": "jayat3dn",
-  "license": "ISC",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/berwickgeek/productive-mcp.git"

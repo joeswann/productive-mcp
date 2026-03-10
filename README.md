@@ -407,4 +407,4 @@ When `PRODUCTIVE_USER_ID` is configured, you can use "me" in several tools:
 
 ## License
 
-ISC
+MIT
